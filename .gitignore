@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+backend/uploads/*
+!backend/uploads/.gitkeep
+.env
+*.egg-info/
+dist/
+build/
+
+# Node / Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs & System
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
