@@ -1,6 +1,6 @@
 <div class="app-wrapper">
   
-  <!-- Executive Navbar -->
+  <!-- Cyber-Quartz Top Navbar -->
   <nav class="top-navbar">
     <div class="nav-brand">
       <div class="brand-logo-circle">
@@ -11,17 +11,17 @@
       </div>
       <div class="brand-titles">
         <span class="brand-title">Meeting-to-Action AI</span>
-        <span class="brand-edition">Enterprise Suite</span>
+        <span class="brand-edition">Cyber-Quartz Suite</span>
       </div>
     </div>
 
     <div class="nav-right">
       <div class="system-status-badge">
         <span class="status-indicator-dot"></span>
-        <span>Neural STT Active</span>
+        <span>Neural Whisper Active</span>
       </div>
       @if (summary() || selectedFile() || transcript()) {
-        <button type="button" class="btn-nav-reset" (click)="resetAll()" title="Reset all current analysis">
+        <button type="button" class="btn-nav-reset" (click)="resetAll()" title="Reset workspace">
           Reset
         </button>
       }
@@ -34,11 +34,11 @@
     <header class="header">
       <div class="brand-badge">
         <span class="pulse-dot"></span>
-        <span>AI-Powered Executive Intelligence</span>
+        <span>Next-Gen Audio Intelligence</span>
       </div>
       <h1>Meeting-to-Action AI</h1>
       <p class="subtitle">
-        Automatically convert spoken audio into timestamped transcripts, executive summaries, decision matrices, and structured action items with ownership.
+        Convert live or recorded speech into actionable task checklists, key decision matrices, executive summaries, and interactive AI chat.
       </p>
     </header>
 
@@ -77,7 +77,7 @@
             (click)="activeTab.set('history')"
           >
             <span class="segment-icon">📂</span>
-            <span>Saved Meetings ({{ savedMeetings().length }})</span>
+            <span>History ({{ savedMeetings().length }})</span>
           </button>
         }
       </div>
@@ -109,12 +109,12 @@
             </div>
 
             @if (!selectedFile()) {
-              <h3>Drag & drop meeting recording</h3>
+              <h3>Drag & drop meeting recording here</h3>
               <p class="dropzone-hint">
                 Supports MP3, M4A, WAV, AAC, FLAC, OGG, WebM, MP4 (up to 100MB)
               </p>
               <button type="button" class="btn btn-secondary" (click)="fileInput.click()">
-                Select File
+                Choose Audio File
               </button>
             } @else {
               <div class="selected-file-box">
@@ -159,7 +159,7 @@
           <div class="recorder-header">
             <div class="rec-badge" [class.recording]="isRecording()">
               <span class="rec-dot"></span>
-              <span>{{ isRecording() ? 'RECORDING IN PROGRESS' : 'MICROPHONE STANDBY' }}</span>
+              <span>{{ isRecording() ? 'RECORDING IN PROGRESS' : 'MICROPHONE READY' }}</span>
             </div>
             <div class="rec-timer">{{ formatRecordingTime(recordingSeconds()) }}</div>
           </div>
@@ -179,11 +179,11 @@
               @if (!selectedFile()) {
                 <button type="button" class="btn btn-record" (click)="startRecording()">
                   <span class="rec-btn-dot"></span>
-                  <span>Start Recording</span>
+                  <span>Start Live Recording</span>
                 </button>
               } @else {
                 <div class="recorded-preview-row">
-                  <span class="rec-file-badge">Recorded Buffer: {{ fileSizeFormatted() }}</span>
+                  <span class="rec-file-badge">Captured Audio: {{ fileSizeFormatted() }}</span>
                   <button type="button" class="btn btn-secondary btn-sm" (click)="startRecording()">
                     Re-Record
                   </button>
@@ -191,7 +191,7 @@
               }
             } @else {
               <button type="button" class="btn btn-stop" (click)="stopRecording()">
-                ⏹ Stop & Process
+                ⏹ Stop & Prepare
               </button>
               <button type="button" class="btn btn-outline" (click)="cancelRecording()">
                 Cancel
@@ -209,14 +209,11 @@
           [disabled]="!selectedFile() || processingStage() === 'uploading' || processingStage() === 'transcribing'"
           (click)="uploadFile()"
         >
-          @if (processingStage() === 'uploading') {
+          @if (processingStage() === 'uploading' || processingStage() === 'transcribing') {
             <span class="spinner"></span>
-            <span>Uploading Audio ({{ uploadProgress() }}%)...</span>
-          } @else if (processingStage() === 'transcribing') {
-            <span class="spinner"></span>
-            <span>Analyzing Meeting Intelligence...</span>
+            <span>Processing Meeting ({{ overallProgress() }}%)...</span>
           } @else {
-            <span>Generate Meeting Intelligence</span>
+            <span>✨ Run AI Meeting Intelligence</span>
             <svg class="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
@@ -224,7 +221,7 @@
         </button>
       </div>
 
-      <!-- Live Multi-Step Processing Tracker -->
+      <!-- Live Dynamic 0% to 100% Completion Bar -->
       @if (processingStage() === 'uploading' || processingStage() === 'transcribing') {
         <div class="processing-tracker">
           <div class="stage-header">
@@ -232,29 +229,26 @@
               <span class="stage-status-dot"></span>
               <span class="stage-message">{{ statusMessage() }}</span>
             </div>
-            @if (processingStage() === 'uploading') {
-              <span class="stage-percent">{{ uploadProgress() }}%</span>
-            }
+            <span class="stage-percent">{{ overallProgress() }}%</span>
           </div>
 
+          <!-- Glowing 0-100% Completion Bar -->
           <div class="progress-bar-track">
-            @if (processingStage() === 'uploading') {
-              <div class="progress-bar-fill" [style.width.%]="uploadProgress()"></div>
-            } @else {
-              <div class="progress-bar-indeterminate"></div>
-            }
+            <div class="progress-bar-fill" [style.width.%]="overallProgress()">
+              <span class="progress-glow-tip"></span>
+            </div>
           </div>
 
           <div class="steps-flow">
-            <div class="step-pill" [class.done]="processingStage() === 'transcribing' || processingStage() === 'completed'" [class.active]="processingStage() === 'uploading'">
+            <div class="step-pill" [class.done]="overallProgress() >= 25" [class.active]="overallProgress() < 25">
               1. Audio Decode
             </div>
             <div class="step-divider"></div>
-            <div class="step-pill" [class.done]="processingStage() === 'completed'" [class.active]="processingStage() === 'transcribing'">
+            <div class="step-pill" [class.done]="overallProgress() >= 75" [class.active]="overallProgress() >= 25 && overallProgress() < 75">
               2. Whisper Neural STT
             </div>
             <div class="step-divider"></div>
-            <div class="step-pill" [class.done]="processingStage() === 'completed'">
+            <div class="step-pill" [class.done]="overallProgress() === 100" [class.active]="overallProgress() >= 75">
               3. NLP Synthesis & Tasks
             </div>
           </div>
@@ -280,7 +274,7 @@
           <!-- Results Top Bar with Export -->
           <div class="results-header">
             <div class="results-title-group">
-              <h2>Executive Dashboard</h2>
+              <h2>Meeting Intelligence Dashboard</h2>
               <span class="results-timestamp">Analysis Complete</span>
             </div>
             <div class="download-toolbar">

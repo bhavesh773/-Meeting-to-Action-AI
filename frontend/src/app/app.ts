@@ -98,9 +98,11 @@ export class App implements OnDestroy {
 
   // Processing state
   uploadProgress = signal<number>(0);
+  overallProgress = signal<number>(0);
   processingStage = signal<ProcessingStage>('idle');
   statusMessage = signal<string>('');
   errorMessage = signal<string>('');
+  private progressInterval: any = null;
 
   // Results state
   transcript = signal<string>('');
@@ -359,6 +361,42 @@ export class App implements OnDestroy {
 
   // --- Processing & AI Pipeline ---
 
+  private startProgressSimulation(): void {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+    }
+    this.overallProgress.set(12);
+    this.statusMessage.set('Uploading & pre-processing audio buffer (12%)...');
+
+    this.progressInterval = setInterval(() => {
+      const curr = this.overallProgress();
+      if (curr < 30) {
+        this.overallProgress.set(curr + 6);
+        this.statusMessage.set(`Uploading audio recording (${this.overallProgress()}%)...`);
+      } else if (curr < 65) {
+        this.overallProgress.set(curr + 4);
+        this.statusMessage.set(`Whisper neural speech-to-text transcription (${this.overallProgress()}%)...`);
+      } else if (curr < 85) {
+        this.overallProgress.set(curr + 2);
+        this.statusMessage.set(`Extracting key decisions, topics & action items (${this.overallProgress()}%)...`);
+      } else if (curr < 96) {
+        this.overallProgress.set(curr + 1);
+        this.statusMessage.set(`Finalizing executive summary & sentiment analysis (${this.overallProgress()}%)...`);
+      }
+    }, 260);
+  }
+
+  private stopProgressSimulation(success: boolean): void {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+      this.progressInterval = null;
+    }
+    if (success) {
+      this.overallProgress.set(100);
+      this.statusMessage.set('Analysis Complete (100%)!');
+    }
+  }
+
   uploadFile(): void {
     const file = this.selectedFile();
     if (!file) return;
@@ -376,7 +414,7 @@ export class App implements OnDestroy {
 
     this.uploadProgress.set(0);
     this.processingStage.set('uploading');
-    this.statusMessage.set('Uploading audio recording to server...');
+    this.startProgressSimulation();
 
     const formData = new FormData();
     formData.append('file', file, file.name);
@@ -391,7 +429,6 @@ export class App implements OnDestroy {
           this.uploadProgress.set(percent);
           if (percent === 100) {
             this.processingStage.set('transcribing');
-            this.statusMessage.set('Transcribing with Whisper & extracting intelligence...');
           }
         }
 
@@ -399,13 +436,14 @@ export class App implements OnDestroy {
           const body = event.body;
 
           if (!body || body.success === false) {
+            this.stopProgressSimulation(false);
             this.processingStage.set('error');
             this.errorMessage.set(body?.error || body?.detail || 'An unexpected error occurred during processing.');
             return;
           }
 
+          this.stopProgressSimulation(true);
           this.processingStage.set('completed');
-          this.statusMessage.set('Meeting analyzed successfully!');
           this.activeTab.set('overview');
 
           this.transcript.set(body.transcript || '');
@@ -433,6 +471,7 @@ export class App implements OnDestroy {
       },
       error: (err) => {
         console.error('Processing request error:', err);
+        this.stopProgressSimulation(false);
         this.processingStage.set('error');
         const detail = err.error?.detail || err.message || 'Could not connect to backend server. Make sure FastAPI is running on http://127.0.0.1:8000';
         this.errorMessage.set(detail);
@@ -665,6 +704,7 @@ export class App implements OnDestroy {
   }
 
   resetAll(): void {
+    this.stopProgressSimulation(false);
     if (this.audioPreviewUrl()) {
       URL.revokeObjectURL(this.audioPreviewUrl()!);
       this.audioPreviewUrl.set(null);
@@ -672,6 +712,7 @@ export class App implements OnDestroy {
     this.selectedFile.set(null);
     this.fileSizeFormatted.set('');
     this.uploadProgress.set(0);
+    this.overallProgress.set(0);
     this.processingStage.set('idle');
     this.statusMessage.set('');
     this.errorMessage.set('');

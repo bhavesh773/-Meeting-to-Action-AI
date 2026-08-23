@@ -1,42 +1,43 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-main: #07090e;
-  --bg-gradient: radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.12), transparent 45%),
-                 radial-gradient(circle at 90% 15%, rgba(99, 102, 241, 0.1), transparent 45%),
-                 radial-gradient(circle at 50% 90%, rgba(16, 185, 129, 0.06), transparent 50%),
-                 #07090e;
-                 
-  --surface-primary: rgba(13, 18, 30, 0.75);
-  --surface-secondary: rgba(19, 26, 42, 0.6);
-  --surface-tertiary: rgba(255, 255, 255, 0.03);
-  --surface-elevated: rgba(26, 35, 58, 0.85);
+  /* Celestial Cyber-Quartz Theme */
+  --bg-main: #060913;
+  --bg-gradient: radial-gradient(circle at 15% 10%, rgba(0, 245, 212, 0.12), transparent 40%),
+                 radial-gradient(circle at 85% 15%, rgba(99, 102, 241, 0.16), transparent 45%),
+                 radial-gradient(circle at 50% 85%, rgba(139, 92, 246, 0.1), transparent 50%),
+                 #060913;
 
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-medium: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(59, 130, 246, 0.35);
-  --card-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --card-shadow-hover: 0 20px 48px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(59, 130, 246, 0.25);
+  --surface-primary: rgba(11, 17, 32, 0.72);
+  --surface-secondary: rgba(16, 24, 45, 0.6);
+  --surface-elevated: rgba(22, 32, 59, 0.85);
+  --surface-glass: rgba(255, 255, 255, 0.035);
 
-  --primary-500: #3b82f6;
-  --primary-600: #2563eb;
-  --primary-700: #1d4ed8;
-  --primary-glow: rgba(59, 130, 246, 0.35);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.14);
+  --border-glow: rgba(0, 245, 212, 0.35);
+  --border-indigo: rgba(99, 102, 241, 0.4);
 
-  --accent-purple: #8b5cf6;
-  --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-rose: #f43f5e;
-  --accent-cyan: #06b6d4;
+  --card-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --card-shadow-glow: 0 24px 56px -8px rgba(0, 245, 212, 0.12), 0 0 0 1px rgba(0, 245, 212, 0.3);
+
+  /* Vibrant Neon Accents */
+  --neon-cyan: #00f5d4;
+  --neon-teal: #00b4d8;
+  --neon-indigo: #6366f1;
+  --neon-purple: #a855f7;
+  --neon-amber: #ffb703;
+  --neon-rose: #f43f5e;
+  --neon-emerald: #10b981;
 
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-tertiary: #64748b;
   --text-muted: #475569;
 
-  --font-main: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Plus Jakarta Sans', 'Outfit', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 *, *::before, *::after {
@@ -57,27 +58,27 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Executive Scrollbar */
+/* Custom Cyber Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(10, 14, 23, 0.8);
+  background: rgba(6, 9, 19, 0.85);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 245, 212, 0.2);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(0, 245, 212, 0.45);
 }
 
 /* Focus styles */
 button:focus-visible, input:focus-visible, select:focus-visible {
-  outline: 2px solid var(--primary-500);
+  outline: 2px solid var(--neon-cyan);
   outline-offset: 2px;
 }
