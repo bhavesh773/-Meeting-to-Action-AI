@@ -1,715 +1,750 @@
-<div class="app-container">
+<div class="app-wrapper">
   
-  <!-- Header -->
-  <header class="header">
-    <div class="brand-badge">
-      <span class="pulse-dot"></span>
-      <span>Next-Gen AI Meeting Assistant</span>
-    </div>
-    <h1>🎙️ Meeting-to-Action AI</h1>
-    <p class="subtitle">
-      Convert recorded or live spoken meetings into transcripts, executive summaries, decisions, action items, and chat with AI.
-    </p>
-  </header>
-
-  <!-- Main Workspace Card -->
-  <main class="main-card">
-    
-    <!-- Mode Switcher Tabs (Upload vs Live Record vs History) -->
-    <div class="mode-tabs">
-      <button 
-        type="button"
-        class="mode-tab-btn" 
-        [class.active]="ingestionMode() === 'upload'"
-        (click)="ingestionMode.set('upload')"
-        [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
-      >
-        📁 Upload Recording
-      </button>
-
-      <button 
-        type="button"
-        class="mode-tab-btn" 
-        [class.active]="ingestionMode() === 'record'"
-        (click)="ingestionMode.set('record')"
-        [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
-      >
-        🎙️ Record Live Meeting
-      </button>
-
-      @if (savedMeetings().length > 0) {
-        <button 
-          type="button"
-          class="mode-tab-btn history-tab-btn" 
-          [class.active]="activeTab() === 'history' && (summary() || actionItems().length > 0)"
-          (click)="activeTab.set('history')"
-        >
-          📂 My Meetings ({{ savedMeetings().length }})
-        </button>
-      }
+  <!-- Executive Navbar -->
+  <nav class="top-navbar">
+    <div class="nav-brand">
+      <div class="brand-logo-circle">
+        <svg class="brand-logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" />
+        </svg>
+      </div>
+      <div class="brand-titles">
+        <span class="brand-title">Meeting-to-Action AI</span>
+        <span class="brand-edition">Enterprise Suite</span>
+      </div>
     </div>
 
-    <!-- Mode 1: File Upload Dropzone -->
-    @if (ingestionMode() === 'upload') {
-      <div 
-        class="dropzone"
-        [class.active]="isDragging()"
-        (dragover)="onDragOver($event)"
-        (dragleave)="onDragLeave($event)"
-        (drop)="onDrop($event)"
-      >
-        <input
-          #fileInput
-          type="file"
-          id="audio-upload-input"
-          accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.webm,.mp4,.mov,.mkv"
-          (change)="onFileSelected($event)"
-          class="hidden-file-input"
-        />
-
-        <div class="dropzone-content">
-          <div class="icon-circle">
-            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-          </div>
-
-          @if (!selectedFile()) {
-            <h3>Drop your meeting audio or video here</h3>
-            <p class="dropzone-hint">
-              Supports MP3, M4A, WAV, AAC, FLAC, OGG, WebM, MP4 (up to 100MB)
-            </p>
-            <button type="button" class="btn btn-secondary" (click)="fileInput.click()">
-              Browse Files
-            </button>
-          } @else {
-            <div class="selected-file-box">
-              <div class="file-icon">🎵</div>
-              <div class="file-details">
-                <div class="file-name" [title]="selectedFile()?.name || ''">{{ selectedFile()?.name }}</div>
-                <div class="file-meta">
-                  <span class="file-size">{{ fileSizeFormatted() }}</span>
-                  <span class="file-badge">Ready for AI</span>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                class="btn-icon" 
-                title="Choose another file"
-                (click)="fileInput.click()"
-                [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
-              >
-                🔄
-              </button>
-            </div>
-
-            @if (audioPreviewUrl()) {
-              <div class="audio-player-wrapper">
-                <audio [src]="audioPreviewUrl()" controls class="audio-player"></audio>
-              </div>
-            }
-          }
-        </div>
+    <div class="nav-right">
+      <div class="system-status-badge">
+        <span class="status-indicator-dot"></span>
+        <span>Neural STT Active</span>
       </div>
-    }
-
-    <!-- Mode 2: Live In-Browser Microphone Recorder -->
-    @if (ingestionMode() === 'record') {
-      <div class="recorder-card">
-        <div class="recorder-header">
-          <div class="rec-badge" [class.recording]="isRecording()">
-            <span class="rec-dot"></span>
-            <span>{{ isRecording() ? 'LIVE RECORDING' : 'MICROPHONE READY' }}</span>
-          </div>
-          <div class="rec-timer">{{ formatRecordingTime(recordingSeconds()) }}</div>
-        </div>
-
-        <!-- Real-time Canvas Sound Visualizer -->
-        <div class="visualizer-container">
-          <canvas #visualizerCanvas width="600" height="90" class="visualizer-canvas"></canvas>
-          @if (!isRecording() && !selectedFile()) {
-            <div class="visualizer-placeholder">
-              <span>Click "Start Recording" to capture audio live from your microphone</span>
-            </div>
-          }
-        </div>
-
-        <div class="recorder-actions">
-          @if (!isRecording()) {
-            @if (!selectedFile()) {
-              <button type="button" class="btn btn-record" (click)="startRecording()">
-                🔴 Start Live Recording
-              </button>
-            } @else {
-              <div class="recorded-preview-row">
-                <span class="rec-file-badge">✅ Captured: {{ fileSizeFormatted() }}</span>
-                <button type="button" class="btn btn-record" (click)="startRecording()">
-                  🔄 Record Again
-                </button>
-              </div>
-            }
-          } @else {
-            <button type="button" class="btn btn-stop" (click)="stopRecording()">
-              ⏹️ Stop & Prepare Audio
-            </button>
-            <button type="button" class="btn btn-outline" (click)="cancelRecording()">
-              Cancel
-            </button>
-          }
-        </div>
-      </div>
-    }
-
-    <!-- Action Toolbar -->
-    <div class="action-bar">
-      <button 
-        type="button" 
-        class="btn btn-primary"
-        [disabled]="!selectedFile() || processingStage() === 'uploading' || processingStage() === 'transcribing'"
-        (click)="uploadFile()"
-      >
-        @if (processingStage() === 'uploading') {
-          <span class="spinner"></span>
-          <span>Uploading ({{ uploadProgress() }}%)...</span>
-        } @else if (processingStage() === 'transcribing') {
-          <span class="spinner"></span>
-          <span>Whisper AI Processing & Extracting...</span>
-        } @else {
-          <span>✨ Analyze Meeting with AI</span>
-        }
-      </button>
-
-      @if (selectedFile() || transcript() || errorMessage()) {
-        <button 
-          type="button" 
-          class="btn btn-outline"
-          [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
-          (click)="resetAll()"
-        >
+      @if (summary() || selectedFile() || transcript()) {
+        <button type="button" class="btn-nav-reset" (click)="resetAll()" title="Reset all current analysis">
           Reset
         </button>
       }
     </div>
+  </nav>
 
-    <!-- Live Multi-Step Processing Tracker -->
-    @if (processingStage() === 'uploading' || processingStage() === 'transcribing') {
-      <div class="processing-tracker">
-        <div class="stage-header">
-          <div class="stage-info">
-            <span class="stage-status-dot"></span>
-            <span class="stage-message">{{ statusMessage() }}</span>
-          </div>
-          @if (processingStage() === 'uploading') {
-            <span class="stage-percent">{{ uploadProgress() }}%</span>
-          }
-        </div>
-
-        <div class="progress-bar-track">
-          @if (processingStage() === 'uploading') {
-            <div class="progress-bar-fill" [style.width.%]="uploadProgress()"></div>
-          } @else {
-            <div class="progress-bar-indeterminate"></div>
-          }
-        </div>
-
-        <div class="steps-flow">
-          <div class="step-pill" [class.done]="processingStage() === 'transcribing' || processingStage() === 'completed'" [class.active]="processingStage() === 'uploading'">
-            1. Ingestion & Audio Prep
-          </div>
-          <div class="step-divider"></div>
-          <div class="step-pill" [class.done]="processingStage() === 'completed'" [class.active]="processingStage() === 'transcribing'">
-            2. Whisper Transcription
-          </div>
-          <div class="step-divider"></div>
-          <div class="step-pill" [class.done]="processingStage() === 'completed'">
-            3. NLP Insights & Actions
-          </div>
-        </div>
+  <div class="app-container">
+    
+    <!-- Hero Header -->
+    <header class="header">
+      <div class="brand-badge">
+        <span class="pulse-dot"></span>
+        <span>AI-Powered Executive Intelligence</span>
       </div>
-    }
+      <h1>Meeting-to-Action AI</h1>
+      <p class="subtitle">
+        Automatically convert spoken audio into timestamped transcripts, executive summaries, decision matrices, and structured action items with ownership.
+      </p>
+    </header>
 
-    <!-- Error Alert Banner -->
-    @if (errorMessage()) {
-      <div class="alert-card alert-error">
-        <div class="alert-icon">⚠️</div>
-        <div class="alert-content">
-          <strong>Processing Error</strong>
-          <p>{{ errorMessage() }}</p>
-        </div>
-        <button type="button" class="btn-close" (click)="errorMessage.set('')">✕</button>
-      </div>
-    }
+    <!-- Main Workspace Card -->
+    <main class="main-card">
+      
+      <!-- Segmented Mode Switcher -->
+      <div class="segmented-control">
+        <button 
+          type="button"
+          class="segment-btn" 
+          [class.active]="ingestionMode() === 'upload'"
+          (click)="ingestionMode.set('upload')"
+          [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
+        >
+          <span class="segment-icon">📁</span>
+          <span>Upload Recording</span>
+        </button>
 
-    <!-- Results Dashboard Section -->
-    @if (summary() || actionItems().length > 0 || transcript() || savedMeetings().length > 0) {
-      <section class="results-section">
-        
-        <!-- Results Top Bar with Export -->
-        <div class="results-header">
-          <h2>Meeting Intelligence Dashboard</h2>
-          <div class="download-toolbar">
-            <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('pdf')" title="Print or save as PDF">
-              📄 Export PDF
-            </button>
-            <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('md')" title="Download Markdown Report">
-              📝 Export Markdown
-            </button>
-            <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('txt')" title="Download Text Report">
-              📃 Export TXT
-            </button>
-          </div>
-        </div>
+        <button 
+          type="button"
+          class="segment-btn" 
+          [class.active]="ingestionMode() === 'record'"
+          (click)="ingestionMode.set('record')"
+          [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
+        >
+          <span class="segment-icon">🎙️</span>
+          <span>Live Microphone</span>
+        </button>
 
-        <!-- Dashboard Navigation Tabs -->
-        <div class="dashboard-tabs">
+        @if (savedMeetings().length > 0) {
           <button 
-            type="button" 
-            class="tab-btn" 
-            [class.active]="activeTab() === 'overview'"
-            (click)="activeTab.set('overview')"
+            type="button"
+            class="segment-btn history-btn" 
+            [class.active]="activeTab() === 'history' && (summary() || actionItems().length > 0)"
+            (click)="activeTab.set('history')"
           >
-            📊 Overview & Insights
+            <span class="segment-icon">📂</span>
+            <span>Saved Meetings ({{ savedMeetings().length }})</span>
           </button>
+        }
+      </div>
 
-          <button 
-            type="button" 
-            class="tab-btn" 
-            [class.active]="activeTab() === 'tasks'"
-            (click)="activeTab.set('tasks')"
-          >
-            ✅ Tasks & Decisions
-            @if (actionItems().length > 0) {
-              <span class="tab-badge">{{ actionItems().length }}</span>
+      <!-- Mode 1: File Upload Dropzone -->
+      @if (ingestionMode() === 'upload') {
+        <div 
+          class="dropzone"
+          [class.active]="isDragging()"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+        >
+          <input
+            #fileInput
+            type="file"
+            id="audio-upload-input"
+            accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.webm,.mp4,.mov,.mkv"
+            (change)="onFileSelected($event)"
+            class="hidden-file-input"
+          />
+
+          <div class="dropzone-content">
+            <div class="icon-circle">
+              <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+
+            @if (!selectedFile()) {
+              <h3>Drag & drop meeting recording</h3>
+              <p class="dropzone-hint">
+                Supports MP3, M4A, WAV, AAC, FLAC, OGG, WebM, MP4 (up to 100MB)
+              </p>
+              <button type="button" class="btn btn-secondary" (click)="fileInput.click()">
+                Select File
+              </button>
+            } @else {
+              <div class="selected-file-box">
+                <div class="file-icon-box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="audio-file-svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                </div>
+                <div class="file-details">
+                  <div class="file-name" [title]="selectedFile()?.name || ''">{{ selectedFile()?.name }}</div>
+                  <div class="file-meta">
+                    <span class="file-size">{{ fileSizeFormatted() }}</span>
+                    <span class="file-badge">Validated & Ready</span>
+                  </div>
+                </div>
+                <button 
+                  type="button" 
+                  class="btn-icon" 
+                  title="Choose another file"
+                  (click)="fileInput.click()"
+                  [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="icon-refresh">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+
+              @if (audioPreviewUrl()) {
+                <div class="audio-player-wrapper">
+                  <audio [src]="audioPreviewUrl()" controls class="audio-player"></audio>
+                </div>
+              }
             }
-          </button>
+          </div>
+        </div>
+      }
 
-          <button 
-            type="button" 
-            class="tab-btn chat-tab-btn" 
-            [class.active]="activeTab() === 'chat'"
-            (click)="activeTab.set('chat')"
-          >
-            💬 Ask AI Assistant
-          </button>
+      <!-- Mode 2: Live In-Browser Microphone Recorder -->
+      @if (ingestionMode() === 'record') {
+        <div class="recorder-card">
+          <div class="recorder-header">
+            <div class="rec-badge" [class.recording]="isRecording()">
+              <span class="rec-dot"></span>
+              <span>{{ isRecording() ? 'RECORDING IN PROGRESS' : 'MICROPHONE STANDBY' }}</span>
+            </div>
+            <div class="rec-timer">{{ formatRecordingTime(recordingSeconds()) }}</div>
+          </div>
 
-          <button 
-            type="button" 
-            class="tab-btn" 
-            [class.active]="activeTab() === 'transcript'"
-            (click)="activeTab.set('transcript')"
-          >
-            📄 Search Transcript
-          </button>
+          <!-- Real-time Canvas Sound Visualizer -->
+          <div class="visualizer-container">
+            <canvas #visualizerCanvas width="640" height="90" class="visualizer-canvas"></canvas>
+            @if (!isRecording() && !selectedFile()) {
+              <div class="visualizer-placeholder">
+                <span class="placeholder-text">Click "Start Recording" to capture real-time audio from your microphone</span>
+              </div>
+            }
+          </div>
 
-          @if (savedMeetings().length > 0) {
+          <div class="recorder-actions">
+            @if (!isRecording()) {
+              @if (!selectedFile()) {
+                <button type="button" class="btn btn-record" (click)="startRecording()">
+                  <span class="rec-btn-dot"></span>
+                  <span>Start Recording</span>
+                </button>
+              } @else {
+                <div class="recorded-preview-row">
+                  <span class="rec-file-badge">Recorded Buffer: {{ fileSizeFormatted() }}</span>
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="startRecording()">
+                    Re-Record
+                  </button>
+                </div>
+              }
+            } @else {
+              <button type="button" class="btn btn-stop" (click)="stopRecording()">
+                ⏹ Stop & Process
+              </button>
+              <button type="button" class="btn btn-outline" (click)="cancelRecording()">
+                Cancel
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Action Toolbar -->
+      <div class="action-bar">
+        <button 
+          type="button" 
+          class="btn btn-primary"
+          [disabled]="!selectedFile() || processingStage() === 'uploading' || processingStage() === 'transcribing'"
+          (click)="uploadFile()"
+        >
+          @if (processingStage() === 'uploading') {
+            <span class="spinner"></span>
+            <span>Uploading Audio ({{ uploadProgress() }}%)...</span>
+          } @else if (processingStage() === 'transcribing') {
+            <span class="spinner"></span>
+            <span>Analyzing Meeting Intelligence...</span>
+          } @else {
+            <span>Generate Meeting Intelligence</span>
+            <svg class="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          }
+        </button>
+      </div>
+
+      <!-- Live Multi-Step Processing Tracker -->
+      @if (processingStage() === 'uploading' || processingStage() === 'transcribing') {
+        <div class="processing-tracker">
+          <div class="stage-header">
+            <div class="stage-info">
+              <span class="stage-status-dot"></span>
+              <span class="stage-message">{{ statusMessage() }}</span>
+            </div>
+            @if (processingStage() === 'uploading') {
+              <span class="stage-percent">{{ uploadProgress() }}%</span>
+            }
+          </div>
+
+          <div class="progress-bar-track">
+            @if (processingStage() === 'uploading') {
+              <div class="progress-bar-fill" [style.width.%]="uploadProgress()"></div>
+            } @else {
+              <div class="progress-bar-indeterminate"></div>
+            }
+          </div>
+
+          <div class="steps-flow">
+            <div class="step-pill" [class.done]="processingStage() === 'transcribing' || processingStage() === 'completed'" [class.active]="processingStage() === 'uploading'">
+              1. Audio Decode
+            </div>
+            <div class="step-divider"></div>
+            <div class="step-pill" [class.done]="processingStage() === 'completed'" [class.active]="processingStage() === 'transcribing'">
+              2. Whisper Neural STT
+            </div>
+            <div class="step-divider"></div>
+            <div class="step-pill" [class.done]="processingStage() === 'completed'">
+              3. NLP Synthesis & Tasks
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Error Alert Banner -->
+      @if (errorMessage()) {
+        <div class="alert-card alert-error">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-content">
+            <strong>Processing Error</strong>
+            <p>{{ errorMessage() }}</p>
+          </div>
+          <button type="button" class="btn-close" (click)="errorMessage.set('')">✕</button>
+        </div>
+      }
+
+      <!-- Results Dashboard Section -->
+      @if (summary() || actionItems().length > 0 || transcript() || savedMeetings().length > 0) {
+        <section class="results-section">
+          
+          <!-- Results Top Bar with Export -->
+          <div class="results-header">
+            <div class="results-title-group">
+              <h2>Executive Dashboard</h2>
+              <span class="results-timestamp">Analysis Complete</span>
+            </div>
+            <div class="download-toolbar">
+              <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('pdf')" title="Print or save as PDF">
+                📄 Export PDF
+              </button>
+              <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('md')" title="Download Markdown Report">
+                📝 Markdown
+              </button>
+              <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('txt')" title="Download Text Report">
+                📃 Plain Text
+              </button>
+            </div>
+          </div>
+
+          <!-- Dashboard Navigation Tabs -->
+          <div class="dashboard-tabs">
             <button 
               type="button" 
               class="tab-btn" 
-              [class.active]="activeTab() === 'history'"
-              (click)="activeTab.set('history')"
+              [class.active]="activeTab() === 'overview'"
+              (click)="activeTab.set('overview')"
             >
-              📂 History ({{ savedMeetings().length }})
+              <span>📊 Overview</span>
             </button>
-          }
-        </div>
 
-        <!-- TAB 1: Overview & Insights -->
-        @if (activeTab() === 'overview') {
-          <div class="tab-content">
-            
-            <!-- Statistics Bar -->
-            @if (insights()) {
-              <div class="insights-bar">
-                <div class="insight-card">
-                  <span class="insight-icon">⏱️</span>
-                  <div class="insight-data">
-                    <span class="insight-value">{{ insights()!.duration_formatted }}</span>
-                    <span class="insight-label">Duration</span>
-                  </div>
-                </div>
+            <button 
+              type="button" 
+              class="tab-btn" 
+              [class.active]="activeTab() === 'tasks'"
+              (click)="activeTab.set('tasks')"
+            >
+              <span>✅ Tasks & Decisions</span>
+              @if (actionItems().length > 0) {
+                <span class="tab-badge">{{ actionItems().length }}</span>
+              }
+            </button>
 
-                <div class="insight-card">
-                  <span class="insight-icon">📝</span>
-                  <div class="insight-data">
-                    <span class="insight-value">{{ insights()!.word_count }}</span>
-                    <span class="insight-label">Words Spoken</span>
-                  </div>
-                </div>
+            <button 
+              type="button" 
+              class="tab-btn chat-tab-btn" 
+              [class.active]="activeTab() === 'chat'"
+              (click)="activeTab.set('chat')"
+            >
+              <span>💬 Ask AI Assistant</span>
+            </button>
 
-                <div class="insight-card">
-                  <span class="insight-icon">🤝</span>
-                  <div class="insight-data">
-                    <span class="insight-value">{{ insights()!.decisions_count }}</span>
-                    <span class="insight-label">Decisions</span>
-                  </div>
-                </div>
+            <button 
+              type="button" 
+              class="tab-btn" 
+              [class.active]="activeTab() === 'transcript'"
+              (click)="activeTab.set('transcript')"
+            >
+              <span>📄 Transcript</span>
+            </button>
 
-                <div class="insight-card">
-                  <span class="insight-icon">✅</span>
-                  <div class="insight-data">
-                    <span class="insight-value">{{ insights()!.action_items_count }}</span>
-                    <span class="insight-label">Action Items</span>
-                  </div>
-                </div>
-              </div>
+            @if (savedMeetings().length > 0) {
+              <button 
+                type="button" 
+                class="tab-btn" 
+                [class.active]="activeTab() === 'history'"
+                (click)="activeTab.set('history')"
+              >
+                <span>📂 History ({{ savedMeetings().length }})</span>
+              </button>
             }
+          </div>
 
-            <!-- Sentiment & Tone Card -->
-            @if (sentiment()) {
-              <div class="result-card sentiment-card">
-                <div class="card-title-row">
-                  <div class="title-with-icon">
-                    <span class="card-icon">🎭</span>
-                    <h3>Meeting Dynamics & Tone Analysis</h3>
+          <!-- TAB 1: Overview & Insights -->
+          @if (activeTab() === 'overview') {
+            <div class="tab-content">
+              
+              <!-- Metrics Stat Tiles -->
+              @if (insights()) {
+                <div class="insights-bar">
+                  <div class="insight-card">
+                    <div class="insight-icon-box">⏱️</div>
+                    <div class="insight-data">
+                      <span class="insight-value">{{ insights()!.duration_formatted }}</span>
+                      <span class="insight-label">Duration</span>
+                    </div>
                   </div>
-                  <span class="sentiment-pill">{{ sentiment()!.overall }}</span>
-                </div>
-                <div class="sentiment-body">
-                  <div class="sentiment-score-box">
-                    <div class="score-number">{{ sentiment()!.score }}%</div>
-                    <div class="score-label">Productivity Index</div>
+
+                  <div class="insight-card">
+                    <div class="insight-icon-box">📝</div>
+                    <div class="insight-data">
+                      <span class="insight-value">{{ insights()!.word_count }}</span>
+                      <span class="insight-label">Total Words</span>
+                    </div>
                   </div>
-                  <div class="sentiment-details">
-                    <p class="tone-desc"><strong>Atmosphere & Tone:</strong> {{ sentiment()!.tone }}</p>
-                    <div class="topic-chips">
-                      <span class="topic-label">Key Topics:</span>
-                      @for (t of sentiment()!.topics; track t) {
-                        <span class="topic-tag">#{{ t }}</span>
-                      }
+
+                  <div class="insight-card">
+                    <div class="insight-icon-box">🤝</div>
+                    <div class="insight-data">
+                      <span class="insight-value">{{ insights()!.decisions_count }}</span>
+                      <span class="insight-label">Key Decisions</span>
+                    </div>
+                  </div>
+
+                  <div class="insight-card">
+                    <div class="insight-icon-box">✅</div>
+                    <div class="insight-data">
+                      <span class="insight-value">{{ insights()!.action_items_count }}</span>
+                      <span class="insight-label">Action Items</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            }
+              }
 
-            <!-- Executive Summary Card -->
-            @if (summary()) {
-              <div class="result-card summary-card">
-                <div class="card-title-row">
-                  <div class="title-with-icon">
-                    <span class="card-icon">📝</span>
-                    <h3>Executive Summary</h3>
+              <!-- Sentiment & Dynamics Card -->
+              @if (sentiment()) {
+                <div class="result-card sentiment-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">🎭</span>
+                      <h3>Meeting Dynamics & Tone Analysis</h3>
+                    </div>
+                    <span class="sentiment-pill">{{ sentiment()!.overall }}</span>
                   </div>
-                  <button 
-                    class="btn-copy" 
-                    title="Copy summary" 
-                    (click)="copyToClipboard(summary(), 'executive summary')"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <p class="summary-text">{{ summary() }}</p>
-              </div>
-            }
-
-            <!-- Key Points Card -->
-            @if (keyPoints().length > 0) {
-              <div class="result-card keypoints-card">
-                <div class="card-title-row">
-                  <div class="title-with-icon">
-                    <span class="card-icon">📌</span>
-                    <h3>Key Points & Highlights</h3>
+                  <div class="sentiment-body">
+                    <div class="sentiment-score-box">
+                      <div class="score-number">{{ sentiment()!.score }}%</div>
+                      <div class="score-label">Productivity Index</div>
+                    </div>
+                    <div class="sentiment-details">
+                      <p class="tone-desc"><strong>Atmosphere:</strong> {{ sentiment()!.tone }}</p>
+                      <div class="topic-chips">
+                        <span class="topic-label">Core Topics:</span>
+                        @for (t of sentiment()!.topics; track t) {
+                          <span class="topic-tag">#{{ t }}</span>
+                        }
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <ul class="keypoints-list">
-                  @for (point of keyPoints(); track point) {
-                    <li>{{ point }}</li>
-                  }
-                </ul>
-              </div>
-            }
+              }
 
-          </div>
-        }
-
-        <!-- TAB 2: Tasks & Decisions -->
-        @if (activeTab() === 'tasks') {
-          <div class="tab-content">
-            
-            <!-- Action Items Card -->
-            @if (actionItems().length > 0) {
-              <div class="result-card action-card">
-                <div class="card-title-row">
-                  <div class="title-with-icon">
-                    <span class="card-icon">✅</span>
-                    <h3>Action Items & Tasks ({{ actionItems().length }})</h3>
-                  </div>
-                  
-                  <div class="action-card-controls">
-                    <!-- Priority Filter -->
-                    <select 
-                      class="priority-select" 
-                      [ngModel]="priorityFilter()" 
-                      (ngModelChange)="priorityFilter.set($event)"
-                    >
-                      <option value="all">All Priorities</option>
-                      <option value="high">High Priority</option>
-                      <option value="medium">Medium Priority</option>
-                      <option value="low">Low Priority</option>
-                    </select>
-
+              <!-- Executive Summary Card -->
+              @if (summary()) {
+                <div class="result-card summary-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">📝</span>
+                      <h3>Executive Summary</h3>
+                    </div>
                     <button 
                       class="btn-copy" 
-                      title="Copy all action items" 
-                      (click)="copyAllActionItems()"
+                      title="Copy summary" 
+                      (click)="copyToClipboard(summary(), 'executive summary')"
                     >
-                      Copy All
+                      Copy
                     </button>
+                  </div>
+                  <p class="summary-text">{{ summary() }}</p>
+                </div>
+              }
+
+              <!-- Key Points Card -->
+              @if (keyPoints().length > 0) {
+                <div class="result-card keypoints-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">📌</span>
+                      <h3>Key Highlights & Takeaways</h3>
+                    </div>
+                  </div>
+                  <ul class="keypoints-list">
+                    @for (point of keyPoints(); track point) {
+                      <li>{{ point }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+            </div>
+          }
+
+          <!-- TAB 2: Tasks & Decisions -->
+          @if (activeTab() === 'tasks') {
+            <div class="tab-content">
+              
+              <!-- Action Items Card -->
+              @if (actionItems().length > 0) {
+                <div class="result-card action-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">✅</span>
+                      <h3>Action Items & Assigned Deliverables ({{ actionItems().length }})</h3>
+                    </div>
+                    
+                    <div class="action-card-controls">
+                      <select 
+                        class="priority-select" 
+                        [ngModel]="priorityFilter()" 
+                        (ngModelChange)="priorityFilter.set($event)"
+                      >
+                        <option value="all">All Priorities</option>
+                        <option value="high">High Priority</option>
+                        <option value="medium">Medium Priority</option>
+                        <option value="low">Low Priority</option>
+                      </select>
+
+                      <button 
+                        class="btn-copy" 
+                        title="Copy all action items" 
+                        (click)="copyAllActionItems()"
+                      >
+                        Copy Checklist
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="action-list">
+                    @for (item of filteredActionItems(); track $index) {
+                      <div class="action-item-row" [class.completed]="item.completed">
+                        <label class="checkbox-container">
+                          <input 
+                            type="checkbox" 
+                            [checked]="item.completed"
+                            (change)="toggleActionItem($index)"
+                          />
+                          <span class="checkmark"></span>
+                        </label>
+
+                        <div class="action-content">
+                          <span class="action-task">{{ item.task }}</span>
+                          <div class="action-tags">
+                            <span class="tag-assignee">
+                              👤 {{ item.assignee }}
+                            </span>
+                            <span class="tag-deadline">
+                              📅 {{ item.deadline }}
+                            </span>
+                            <span 
+                              class="tag-priority"
+                              [class.priority-high]="item.priority === 'High'"
+                              [class.priority-medium]="item.priority === 'Medium'"
+                              [class.priority-low]="item.priority === 'Low'"
+                            >
+                              {{ item.priority }} Priority
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Decisions Matrix -->
+              @if (decisions().length > 0) {
+                <div class="result-card decisions-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">🤝</span>
+                      <h3>Key Decisions Matrix</h3>
+                    </div>
+                  </div>
+                  <div class="decisions-table">
+                    @for (decision of decisions(); track decision.details) {
+                      <div class="decision-row">
+                        <span class="decision-topic">{{ decision.topic }}</span>
+                        <span class="decision-details">{{ decision.details }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+            </div>
+          }
+
+          <!-- TAB 3: Interactive "Ask AI" Chatbot -->
+          @if (activeTab() === 'chat') {
+            <div class="tab-content">
+              <div class="result-card chat-card">
+                
+                <div class="chat-header">
+                  <div class="title-with-icon">
+                    <span class="card-icon">🤖</span>
+                    <div>
+                      <h3>Interactive Meeting Assistant</h3>
+                      <p class="chat-subtitle">Ask questions about assignments, deadlines, decisions, or request drafted summaries</p>
+                    </div>
                   </div>
                 </div>
 
-                <div class="action-list">
-                  @for (item of filteredActionItems(); track $index) {
-                    <div class="action-item-row" [class.completed]="item.completed">
-                      <label class="checkbox-container">
-                        <input 
-                          type="checkbox" 
-                          [checked]="item.completed"
-                          (change)="toggleActionItem($index)"
-                        />
-                        <span class="checkmark"></span>
-                      </label>
+                <!-- Suggested Prompts -->
+                <div class="suggested-prompts-row">
+                  @for (prompt of suggestedPrompts(); track prompt) {
+                    <button type="button" class="prompt-chip" (click)="sendSuggestedPrompt(prompt)">
+                      💡 {{ prompt }}
+                    </button>
+                  }
+                </div>
 
-                      <div class="action-content">
-                        <span class="action-task">{{ item.task }}</span>
-                        <div class="action-tags">
-                          <span class="tag-assignee">
-                            👤 Assigned: {{ item.assignee }}
-                          </span>
-                          <span class="tag-deadline">
-                            📅 Deadline: {{ item.deadline }}
-                          </span>
-                          <span 
-                            class="tag-priority"
-                            [class.priority-high]="item.priority === 'High'"
-                            [class.priority-medium]="item.priority === 'Medium'"
-                            [class.priority-low]="item.priority === 'Low'"
-                          >
-                            {{ item.priority }} Priority
-                          </span>
+                <!-- Chat Message Feed -->
+                <div class="chat-messages-box">
+                  @for (msg of chatMessages(); track $index) {
+                    <div class="message-bubble" [class.user]="msg.sender === 'user'" [class.ai]="msg.sender === 'ai'">
+                      <div class="message-sender-avatar">{{ msg.sender === 'user' ? '👤' : '🤖' }}</div>
+                      <div class="message-text-wrapper">
+                        <div class="message-text">{{ msg.text }}</div>
+                        <div class="message-time">{{ msg.timestamp }}</div>
+                      </div>
+                    </div>
+                  }
+
+                  @if (isChatLoading()) {
+                    <div class="message-bubble ai loading">
+                      <div class="message-sender-avatar">🤖</div>
+                      <div class="message-text-wrapper">
+                        <div class="typing-indicator">
+                          <span></span><span></span><span></span>
                         </div>
                       </div>
                     </div>
                   }
                 </div>
-              </div>
-            }
 
-            <!-- Decisions Matrix -->
-            @if (decisions().length > 0) {
-              <div class="result-card decisions-card">
+                <!-- Chat Input Bar -->
+                <div class="chat-input-bar">
+                  <input 
+                    type="text" 
+                    placeholder="Ask a question about this meeting (e.g. 'What are Rahul\'s deliverables?')..."
+                    [ngModel]="chatInput()"
+                    (ngModelChange)="chatInput.set($event)"
+                    (keydown.enter)="sendChatMessage()"
+                    class="chat-input"
+                  />
+                  <button 
+                    type="button" 
+                    class="btn-send"
+                    [disabled]="!chatInput().trim() || isChatLoading()"
+                    (click)="sendChatMessage()"
+                  >
+                    Send ➔
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          }
+
+          <!-- TAB 4: Searchable Transcript with Editable Speakers -->
+          @if (activeTab() === 'transcript') {
+            <div class="tab-content">
+              <div class="result-card transcript-card">
+                
                 <div class="card-title-row">
                   <div class="title-with-icon">
-                    <span class="card-icon">🤝</span>
-                    <h3>Key Decisions Matrix</h3>
+                    <span class="card-icon">📄</span>
+                    <h3>Time-Indexed Meeting Transcript</h3>
+                  </div>
+                  <button 
+                    class="btn-copy" 
+                    title="Copy full transcript" 
+                    (click)="copyToClipboard(transcript(), 'transcript')"
+                  >
+                    Copy All
+                  </button>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="transcript-search-bar">
+                  <span class="search-icon">🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search keywords or speakers (e.g. 'API', 'Angular', 'Speaker 1')..." 
+                    [ngModel]="searchQuery()" 
+                    (ngModelChange)="searchQuery.set($event)"
+                    class="search-input"
+                  />
+                  @if (searchQuery()) {
+                    <span class="search-match-badge">{{ filteredSegments().length }} matches</span>
+                  }
+                </div>
+
+                <!-- Segments list with timestamps & editable speakers -->
+                <div class="transcript-box">
+                  @if (filteredSegments().length > 0) {
+                    <div class="segments-list">
+                      @for (seg of filteredSegments(); track seg.timestamp + seg.text) {
+                        <div class="segment-row">
+                          <span class="segment-timestamp">{{ seg.timestamp }}</span>
+                          
+                          <span 
+                            class="segment-speaker" 
+                            title="Click to rename speaker"
+                            (click)="editSpeaker(seg.speaker)"
+                          >
+                            👤 {{ seg.speaker }} ✏️
+                          </span>
+
+                          <span class="segment-text">{{ seg.text }}</span>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <pre class="raw-transcript">{{ transcript() }}</pre>
+                  }
+                </div>
+
+              </div>
+            </div>
+          }
+
+          <!-- TAB 5: Saved Meeting History -->
+          @if (activeTab() === 'history') {
+            <div class="tab-content">
+              <div class="result-card history-card">
+                
+                <div class="card-title-row">
+                  <div class="title-with-icon">
+                    <span class="card-icon">📂</span>
+                    <h3>Meeting Archives ({{ savedMeetings().length }})</h3>
                   </div>
                 </div>
-                <div class="decisions-table">
-                  @for (decision of decisions(); track decision.details) {
-                    <div class="decision-row">
-                      <span class="decision-topic">{{ decision.topic }}</span>
-                      <span class="decision-details">{{ decision.details }}</span>
+
+                <div class="history-list">
+                  @for (m of savedMeetings(); track m.id) {
+                    <div class="history-item-row" (click)="loadSavedMeeting(m)">
+                      <div class="history-main-info">
+                        <div class="history-title">{{ m.title }}</div>
+                        <div class="history-meta">
+                          <span>📅 {{ m.date }}</span>
+                          <span>⏱️ {{ m.duration }}</span>
+                          <span>✅ {{ m.actionItems.length }} Action Items</span>
+                          <span>🤝 {{ m.decisions.length }} Decisions</span>
+                        </div>
+                      </div>
+
+                      <div class="history-actions">
+                        <button type="button" class="btn-history-load" (click)="loadSavedMeeting(m)">
+                          Load
+                        </button>
+                        <button 
+                          type="button" 
+                          class="btn-history-delete" 
+                          title="Delete from history" 
+                          (click)="deleteSavedMeeting(m.id, $event)"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   }
                 </div>
+
               </div>
-            }
-
-          </div>
-        }
-
-        <!-- TAB 3: Interactive "Ask AI" Chatbot -->
-        @if (activeTab() === 'chat') {
-          <div class="tab-content">
-            <div class="result-card chat-card">
-              
-              <div class="chat-header">
-                <div class="title-with-icon">
-                  <span class="card-icon">🤖</span>
-                  <div>
-                    <h3>Chat with your Meeting</h3>
-                    <p class="chat-subtitle">Ask questions about assignments, deadlines, decisions, or request drafted recaps</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Suggested Prompts -->
-              <div class="suggested-prompts-row">
-                @for (prompt of suggestedPrompts(); track prompt) {
-                  <button type="button" class="prompt-chip" (click)="sendSuggestedPrompt(prompt)">
-                    💡 {{ prompt }}
-                  </button>
-                }
-              </div>
-
-              <!-- Chat Message Feed -->
-              <div class="chat-messages-box">
-                @for (msg of chatMessages(); track $index) {
-                  <div class="message-bubble" [class.user]="msg.sender === 'user'" [class.ai]="msg.sender === 'ai'">
-                    <div class="message-sender-avatar">{{ msg.sender === 'user' ? '👤' : '🤖' }}</div>
-                    <div class="message-text-wrapper">
-                      <div class="message-text">{{ msg.text }}</div>
-                      <div class="message-time">{{ msg.timestamp }}</div>
-                    </div>
-                  </div>
-                }
-
-                @if (isChatLoading()) {
-                  <div class="message-bubble ai loading">
-                    <div class="message-sender-avatar">🤖</div>
-                    <div class="message-text-wrapper">
-                      <div class="typing-indicator">
-                        <span></span><span></span><span></span>
-                      </div>
-                    </div>
-                  </div>
-                }
-              </div>
-
-              <!-- Chat Input Bar -->
-              <div class="chat-input-bar">
-                <input 
-                  type="text" 
-                  placeholder="Ask a question about this meeting (e.g., 'What are Rahul\'s deliverables?')..."
-                  [ngModel]="chatInput()"
-                  (ngModelChange)="chatInput.set($event)"
-                  (keydown.enter)="sendChatMessage()"
-                  class="chat-input"
-                />
-                <button 
-                  type="button" 
-                  class="btn-send"
-                  [disabled]="!chatInput().trim() || isChatLoading()"
-                  (click)="sendChatMessage()"
-                >
-                  Send ➔
-                </button>
-              </div>
-
             </div>
-          </div>
-        }
+          }
 
-        <!-- TAB 4: Searchable Transcript with Editable Speakers -->
-        @if (activeTab() === 'transcript') {
-          <div class="tab-content">
-            <div class="result-card transcript-card">
-              
-              <div class="card-title-row">
-                <div class="title-with-icon">
-                  <span class="card-icon">📄</span>
-                  <h3>Time-Indexed Meeting Transcript</h3>
-                </div>
-                <button 
-                  class="btn-copy" 
-                  title="Copy full transcript" 
-                  (click)="copyToClipboard(transcript(), 'transcript')"
-                >
-                  Copy All
-                </button>
-              </div>
+        </section>
+      }
 
-              <!-- Search Bar -->
-              <div class="transcript-search-bar">
-                <span class="search-icon">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search keywords or speakers (e.g. 'API', 'Angular', 'Speaker 1')..." 
-                  [ngModel]="searchQuery()" 
-                  (ngModelChange)="searchQuery.set($event)"
-                  class="search-input"
-                />
-                @if (searchQuery()) {
-                  <span class="search-match-badge">{{ filteredSegments().length }} matches</span>
-                }
-              </div>
+    </main>
 
-              <!-- Segments list with timestamps & editable speakers -->
-              <div class="transcript-box">
-                @if (filteredSegments().length > 0) {
-                  <div class="segments-list">
-                    @for (seg of filteredSegments(); track seg.timestamp + seg.text) {
-                      <div class="segment-row">
-                        <span class="segment-timestamp">{{ seg.timestamp }}</span>
-                        
-                        <!-- Clickable/editable speaker badge -->
-                        <span 
-                          class="segment-speaker" 
-                          title="Click to rename speaker"
-                          (click)="editSpeaker(seg.speaker)"
-                        >
-                          👤 {{ seg.speaker }} ✏️
-                        </span>
-
-                        <span class="segment-text">{{ seg.text }}</span>
-                      </div>
-                    }
-                  </div>
-                } @else {
-                  <pre class="raw-transcript">{{ transcript() }}</pre>
-                }
-              </div>
-
-            </div>
-          </div>
-        }
-
-        <!-- TAB 5: Saved Meeting History -->
-        @if (activeTab() === 'history') {
-          <div class="tab-content">
-            <div class="result-card history-card">
-              
-              <div class="card-title-row">
-                <div class="title-with-icon">
-                  <span class="card-icon">📂</span>
-                  <h3>Saved Meeting History ({{ savedMeetings().length }})</h3>
-                </div>
-              </div>
-
-              <div class="history-list">
-                @for (m of savedMeetings(); track m.id) {
-                  <div class="history-item-row" (click)="loadSavedMeeting(m)">
-                    <div class="history-main-info">
-                      <div class="history-title">{{ m.title }}</div>
-                      <div class="history-meta">
-                        <span>📅 {{ m.date }}</span>
-                        <span>⏱️ {{ m.duration }}</span>
-                        <span>✅ {{ m.actionItems.length }} Action Items</span>
-                        <span>🤝 {{ m.decisions.length }} Decisions</span>
-                      </div>
-                    </div>
-
-                    <div class="history-actions">
-                      <button type="button" class="btn-history-load" (click)="loadSavedMeeting(m)">
-                        Load Analysis
-                      </button>
-                      <button 
-                        type="button" 
-                        class="btn-history-delete" 
-                        title="Delete from history" 
-                        (click)="deleteSavedMeeting(m.id, $event)"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                }
-              </div>
-
-            </div>
-          </div>
-        }
-
-      </section>
+    <!-- Toast Notification Feedback -->
+    @if (copyFeedback()) {
+      <div class="toast-notification">
+        <span>{{ copyFeedback() }}</span>
+      </div>
     }
 
-  </main>
-
-  <!-- Toast Notification Feedback -->
-  @if (copyFeedback()) {
-    <div class="toast-notification">
-      <span>{{ copyFeedback() }}</span>
-    </div>
-  }
+  </div>
 </div>
