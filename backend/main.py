@@ -11,9 +11,9 @@ from pydantic import BaseModel
 import whisper
 
 app = FastAPI(
-    title="Meeting-to-Action AI API",
-    description="Speech-to-text, meeting summarization, key points, decisions, and action items extraction API",
-    version="2.0.0"
+    title="Meeting-to-Action AI API (Next-Gen)",
+    description="Speech-to-text, meeting intelligence, sentiment analysis, and interactive meeting Q&A API",
+    version="3.0.0"
 )
 
 # Allow Angular frontend origins
@@ -65,7 +65,7 @@ def get_whisper_model():
     return whisper_model
 
 
-# --- Helpers & NLP Analysis ---
+# --- NLP & Semantic Analysis Functions ---
 
 def format_timestamp(seconds: float) -> str:
     """Formats float seconds into mm:ss string."""
@@ -75,20 +75,16 @@ def format_timestamp(seconds: float) -> str:
 
 
 def split_into_sentences(text: str) -> List[str]:
-    """Splits text into clean sentences while respecting abbreviations, decimals, and numbers."""
+    """Splits text into clean sentences while respecting abbreviations and numbers."""
     if not text:
         return []
 
-    # Protect abbreviations
     abbreviations = ["Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Inc.", "Ltd.", "vs.", "e.g.", "i.e.", "approx.", "dept.", "est."]
     protected = text
     for abbr in abbreviations:
         protected = re.sub(r'\b' + re.escape(abbr), abbr.replace('.', '@DOT@'), protected, flags=re.IGNORECASE)
 
-    # Protect decimals
     protected = re.sub(r'(\d+)\.(\d+)', r'\1@DOT@\2', protected)
-
-    # Split on sentence terminal punctuation (. ? !)
     raw_sentences = re.split(r'[\.\?\!]+(?:\s+|$)', protected)
 
     sentences = []
@@ -155,12 +151,11 @@ def extract_key_points(transcript: str) -> List[str]:
     for sentence in sentences:
         s_lower = sentence.lower()
         if any(indicator in s_lower for indicator in [
-            "discussed", "discussed about", "highlighted", "focus on", "goal is", "important",
+            "discussed", "highlighted", "focus on", "goal is", "important",
             "feature", "milestone", "plan is", "agreed", "finalized", "roadmap", "architecture", "timeline"
         ]):
             key_points.append(sentence.rstrip("."))
 
-    # If few matches, fall back to top informative sentences
     if len(key_points) < 2:
         for s in sentences[:4]:
             if s.rstrip(".") not in key_points:
@@ -170,7 +165,7 @@ def extract_key_points(transcript: str) -> List[str]:
 
 
 def extract_decisions(transcript: str) -> List[Dict[str, str]]:
-    """Extracts decisions agreed upon during the meeting (Topic + Details)."""
+    """Extracts decisions agreed upon during the meeting."""
     sentences = split_into_sentences(transcript)
     decisions = []
     seen = set()
@@ -186,12 +181,10 @@ def extract_decisions(transcript: str) -> List[Dict[str, str]]:
         s_clean = sentence.strip().rstrip(".")
         s_lower = s_clean.lower()
 
-        matched = False
         for pattern in decision_patterns:
             match = re.search(pattern, s_clean, re.IGNORECASE)
             if match:
                 details = match.group(1).strip()
-                # Classify topic
                 topic = "General Decision"
                 if "frontend" in s_lower or "angular" in s_lower or "ui" in s_lower or "react" in s_lower:
                     topic = "Frontend Architecture"
@@ -212,10 +205,8 @@ def extract_decisions(transcript: str) -> List[Dict[str, str]]:
                         "topic": topic,
                         "details": s_clean
                     })
-                matched = True
                 break
 
-    # If no explicit decision keyword, create clean summary decisions if present
     if not decisions and len(sentences) >= 2:
         for sentence in sentences:
             if any(w in sentence.lower() for w in ["will", "should", "plan", "scheduled"]):
@@ -267,7 +258,7 @@ def extract_action_items(transcript: str) -> List[Dict[str, str]]:
         elif "we will" in lower_sentence or "let's" in lower_sentence or "we need to" in lower_sentence:
             assignee = "Team"
 
-        # Detect Deadline (e.g. by Friday, by 25 August, by next week, tomorrow, asap)
+        # Detect Deadline
         deadline = "Not specified"
         deadline_match = re.search(
             r'\b(?:by|before|on|due|until)\s+([A-Za-z0-9\s]+?)(?:[\.,]|$|\s+for|\s+and|\s+so|\s+before)',
@@ -306,12 +297,65 @@ def extract_action_items(transcript: str) -> List[Dict[str, str]]:
     return action_items[:8]
 
 
+def analyze_sentiment_and_tone(transcript: str) -> Dict[str, Any]:
+    """Analyzes overall meeting sentiment, tone, and conversational mood."""
+    if not transcript:
+        return {
+            "overall": "Neutral",
+            "score": 50,
+            "tone": "Informative",
+            "topics": ["General Discussion"]
+        }
+
+    lower = transcript.lower()
+
+    positive_words = ["great", "good", "excellent", "progress", "milestone", "success", "achieved", "completed", "positive", "growth", "approved", "love", "awesome"]
+    concern_words = ["urgent", "issue", "bug", "blocker", "delay", "problem", "risk", "critical", "warning", "difficult", "fail", "hard"]
+    action_words = ["deadline", "deliverable", "assign", "schedule", "implement", "release", "ship", "launch", "prepare"]
+
+    pos_count = sum(1 for w in positive_words if w in lower)
+    concern_count = sum(1 for w in concern_words if w in lower)
+    action_count = sum(1 for w in action_words if w in lower)
+
+    score = 50 + (pos_count * 8) - (concern_count * 8)
+    score = max(10, min(95, score))
+
+    if score > 65:
+        overall = "Positive & Productive"
+        tone = "Optimistic & Forward-Looking"
+    elif score < 40:
+        overall = "Action-Oriented (High Urgency)"
+        tone = "Critical & Focus-Driven"
+    else:
+        overall = "Balanced & Constructive"
+        tone = "Collaborative & Structured"
+
+    # Extract dynamic discussion topics
+    topics = []
+    if any(w in lower for w in ["frontend", "ui", "ux", "angular", "design"]):
+        topics.append("Frontend & UI")
+    if any(w in lower for w in ["backend", "api", "fastapi", "database", "server"]):
+        topics.append("Backend & Architecture")
+    if any(w in lower for w in ["test", "testing", "qa", "audit"]):
+        topics.append("Testing & Quality")
+    if any(w in lower for w in ["deploy", "vercel", "cloud", "release"]):
+        topics.append("Deployment & DevOps")
+    if any(w in lower for w in ["timeline", "deadline", "schedule", "roadmap"]):
+        topics.append("Timeline & Milestones")
+
+    if not topics:
+        topics = ["Project Strategy", "Team Collaboration"]
+
+    return {
+        "overall": overall,
+        "score": score,
+        "tone": tone,
+        "topics": topics
+    }
+
+
 def safe_transcribe(file_path: str) -> Dict[str, Any]:
-    """
-    Safely loads, decodes, and transcribes audio with Whisper.
-    Pads short audio and handles tensor dimension edge-cases.
-    Returns full transcript and timestamped segments.
-    """
+    """Safely loads, decodes, and transcribes audio with Whisper."""
     try:
         audio = whisper.load_audio(file_path)
     except Exception as decode_err:
@@ -328,10 +372,9 @@ def safe_transcribe(file_path: str) -> Dict[str, Any]:
             "segments": []
         }
 
-    # Audio duration calculation (16000 samples/sec)
     duration_seconds = len(audio) / 16000.0
 
-    # Pad short audio (< 1s / 16000 samples) with zeros to prevent tensor reshape errors
+    # Pad short audio (< 1s) with zeros
     if len(audio) < 16000:
         import numpy as np
         audio = np.pad(audio, (0, 16000 - len(audio)))
@@ -342,13 +385,33 @@ def safe_transcribe(file_path: str) -> Dict[str, Any]:
         text = result.get("text", "").strip()
         raw_segments = result.get("segments", [])
 
+        # Assign heuristic speaker alternation
         formatted_segments = []
+        current_speaker_idx = 1
+        last_end = 0.0
+
         for seg in raw_segments:
+            start = seg.get("start", 0.0)
+            # If there's a significant pause (> 1.2s), alternate speaker hypothesis
+            if start - last_end > 1.2 and len(formatted_segments) > 0:
+                current_speaker_idx = 2 if current_speaker_idx == 1 else 1
+
+            last_end = seg.get("end", 0.0)
+
+            # Check if speaker name is explicitly in the segment text
+            speaker_label = f"Speaker {current_speaker_idx}"
+            text_seg = seg.get("text", "").strip()
+            name_match = re.match(r'^([A-Z][a-z]+):\s*(.+)', text_seg)
+            if name_match:
+                speaker_label = name_match.group(1)
+                text_seg = name_match.group(2)
+
             formatted_segments.append({
-                "timestamp": format_timestamp(seg.get("start", 0.0)),
-                "start": seg.get("start", 0.0),
+                "timestamp": format_timestamp(start),
+                "start": start,
                 "end": seg.get("end", 0.0),
-                "text": seg.get("text", "").strip()
+                "speaker": speaker_label,
+                "text": text_seg
             })
 
         return {
@@ -383,6 +446,7 @@ class SegmentModel(BaseModel):
     timestamp: str
     start: float
     end: float
+    speaker: str
     text: str
 
 class InsightsModel(BaseModel):
@@ -391,6 +455,12 @@ class InsightsModel(BaseModel):
     word_count: int
     action_items_count: int
     decisions_count: int
+
+class SentimentModel(BaseModel):
+    overall: str
+    score: int
+    tone: str
+    topics: List[str]
 
 class ProcessResponse(BaseModel):
     success: bool
@@ -403,7 +473,19 @@ class ProcessResponse(BaseModel):
     structured_action_items: List[ActionItemModel]
     segments: List[SegmentModel]
     insights: InsightsModel
+    sentiment: SentimentModel
     error: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    question: str
+    transcript: str
+    summary: Optional[str] = ""
+    action_items: Optional[List[Dict[str, Any]]] = []
+    decisions: Optional[List[Dict[str, Any]]] = []
+
+class ChatResponse(BaseModel):
+    answer: str
+    suggested_followups: List[str]
 
 
 # --- Routes ---
@@ -413,10 +495,11 @@ def home():
     return {
         "message": "Meeting-to-Action AI Backend Running 🚀",
         "status": "online",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "endpoints": {
             "health": "/",
-            "process": "/process (POST)"
+            "process": "/process (POST)",
+            "chat": "/chat (POST)"
         }
     }
 
@@ -429,20 +512,21 @@ async def process_meeting(file: UploadFile = File(...)):
             detail="No file uploaded or filename is missing."
         )
 
-    # Sanitize and validate file extension
     file_ext = Path(file.filename).suffix.lower()
+    # Support direct live recordings without explicit extension
+    if not file_ext:
+        file_ext = ".webm"
+
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Unsupported file format '{file_ext}'. Allowed formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
 
-    # Generate isolated unique filename
-    unique_filename = f"{uuid.uuid4().hex}_{Path(file.filename).name}"
+    unique_filename = f"{uuid.uuid4().hex}_{Path(file.filename).name or 'recording'}{file_ext if not Path(file.filename).suffix else ''}"
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
     try:
-        # Read file contents and validate size
         contents = await file.read()
         file_size = len(contents)
 
@@ -458,11 +542,9 @@ async def process_meeting(file: UploadFile = File(...)):
                 detail=f"File exceeds maximum allowed size of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB."
             )
 
-        # Write file securely to disk
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        # Run safe audio decoding & Whisper transcription in worker thread
         transcribe_data = await asyncio.to_thread(safe_transcribe, file_path)
         transcript = transcribe_data["text"]
         duration_sec = transcribe_data["duration"]
@@ -473,14 +555,13 @@ async def process_meeting(file: UploadFile = File(...)):
         key_points = extract_key_points(transcript)
         decisions = extract_decisions(transcript)
         structured_actions = extract_action_items(transcript)
+        sentiment_data = analyze_sentiment_and_tone(transcript)
 
-        # Legacy format string compatibility
         string_actions = [
             f"{item['task']} [{item['assignee']} • Deadline: {item['deadline']} • {item['priority']} Priority]"
             for item in structured_actions
         ]
 
-        # Calculate meeting statistics / insights
         words = len(transcript.split()) if transcript else 0
         mins = int(duration_sec // 60)
         secs = int(duration_sec % 60)
@@ -504,7 +585,8 @@ async def process_meeting(file: UploadFile = File(...)):
             action_items=string_actions,
             structured_action_items=[ActionItemModel(**item) for item in structured_actions],
             segments=[SegmentModel(**seg) for seg in segments],
-            insights=insights
+            insights=insights,
+            sentiment=SentimentModel(**sentiment_data)
         )
 
     except HTTPException:
@@ -516,9 +598,97 @@ async def process_meeting(file: UploadFile = File(...)):
             detail=f"Failed to process meeting audio: {str(e)}"
         )
     finally:
-        # Guarantee cleanup of temporary uploaded audio file
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
             except Exception as cleanup_err:
                 print(f"Warning: Could not remove temporary file {file_path}: {cleanup_err}")
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_meeting(req: ChatRequest):
+    """Answers user questions regarding the meeting transcript using contextual AI reasoning."""
+    q = req.question.strip().lower()
+    transcript = req.transcript.strip()
+
+    if not transcript:
+        return ChatResponse(
+            answer="I don't have any transcript data for this meeting yet. Please process a meeting recording first!",
+            suggested_followups=["Upload an audio file", "Record a meeting"]
+        )
+
+    sentences = split_into_sentences(transcript)
+
+    # 1. Questions about Deadlines / Schedule / Dates
+    if any(w in q for w in ["deadline", "due", "when", "date", "schedule", "time", "friday", "monday"]):
+        deadline_matches = [s for s in sentences if any(w in s.lower() for w in ["deadline", "by", "before", "due", "friday", "monday", "august", "tomorrow", "next week"])]
+        if deadline_matches:
+            ans = "Here are the deadlines and timelines mentioned in the meeting:\n\n"
+            for s in deadline_matches[:4]:
+                ans += f"• {s}\n"
+            return ChatResponse(
+                answer=ans.strip(),
+                suggested_followups=["Who is assigned to each task?", "What are the key decisions?", "Give me a 2-sentence summary"]
+            )
+
+    # 2. Questions about Tasks / Action Items / Responsibilities
+    if any(w in q for w in ["task", "action", "responsibility", "assigned", "who will", "who is doing", "what needs to be done"]):
+        if req.action_items and len(req.action_items) > 0:
+            ans = "Here are the action items and assigned responsibilities:\n\n"
+            for i, item in enumerate(req.action_items, 1):
+                ans += f"{i}. **{item.get('task')}** (Assigned: *{item.get('assignee', 'Team')}*, Due: *{item.get('deadline', 'Not specified')}*)\n"
+            return ChatResponse(
+                answer=ans.strip(),
+                suggested_followups=["What are the highest priority items?", "Draft a follow-up email for the team", "What decisions were agreed on?"]
+            )
+
+    # 3. Questions about Decisions
+    if any(w in q for w in ["decision", "decide", "agreed", "choice", "concluded"]):
+        if req.decisions and len(req.decisions) > 0:
+            ans = "Here are the key decisions finalized during the discussion:\n\n"
+            for d in req.decisions:
+                ans += f"• **{d.get('topic', 'Decision')}**: {d.get('details')}\n"
+            return ChatResponse(
+                answer=ans.strip(),
+                suggested_followups=["What are the next steps?", "Who is responsible for the frontend?", "Summarize the meeting"]
+            )
+
+    # 4. Draft Email / Slack Update
+    if any(w in q for w in ["email", "slack", "message", "draft", "write a follow up"]):
+        ans = "Here is a drafted follow-up email ready to send:\n\n"
+        ans += "**Subject:** Meeting Recap & Next Steps\n\n"
+        ans += "Hi Team,\n\nHere is a quick summary of our recent discussion:\n\n"
+        ans += f"{req.summary or transcript[:200]}...\n\n"
+        if req.action_items:
+            ans += "**Action Items:**\n"
+            for item in req.action_items[:4]:
+                ans += f"- {item.get('task')} ({item.get('assignee')}, Due: {item.get('deadline')})\n"
+        ans += "\nPlease let me know if anyone has questions.\n\nBest regards,\nTeam"
+        return ChatResponse(
+            answer=ans,
+            suggested_followups=["List all decisions", "What are the deadlines?", "Show the full transcript"]
+        )
+
+    # 5. Semantic keyword search match in sentences
+    words = [w for w in re.findall(r'\b\w{3,}\b', q) if w not in ["what", "when", "where", "who", "which", "how", "the", "and", "about", "tell", "show"]]
+    relevant = []
+    for s in sentences:
+        s_lower = s.lower()
+        if any(w in s_lower for w in words):
+            relevant.append(s)
+
+    if relevant:
+        ans = f"Based on the meeting discussion:\n\n"
+        for s in relevant[:4]:
+            ans += f"• {s}\n"
+        return ChatResponse(
+            answer=ans.strip(),
+            suggested_followups=["What are the action items?", "What decisions were made?", "Draft a follow-up email"]
+        )
+
+    # Default fallback answer using summary
+    ans = f"Regarding your question, here is what was discussed in the meeting:\n\n{req.summary or transcript[:250]}."
+    return ChatResponse(
+        answer=ans,
+        suggested_followups=["What are the deadlines?", "List all action items", "Draft a recap email"]
+    )

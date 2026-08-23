@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, ViewChild, computed, inject, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpEventType } from '@angular/common/http';
@@ -20,6 +20,7 @@ export interface TranscriptSegment {
   timestamp: string;
   start: number;
   end: number;
+  speaker: string;
   text: string;
 }
 
@@ -31,7 +32,36 @@ export interface MeetingInsights {
   decisions_count: number;
 }
 
+export interface SentimentData {
+  overall: string;
+  score: number;
+  tone: string;
+  topics: string[];
+}
+
+export interface ChatMessage {
+  sender: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+}
+
+export interface SavedMeeting {
+  id: string;
+  title: string;
+  date: string;
+  duration: string;
+  summary: string;
+  keyPoints: string[];
+  decisions: Decision[];
+  actionItems: ActionItem[];
+  segments: TranscriptSegment[];
+  insights: MeetingInsights;
+  sentiment: SentimentData;
+}
+
+export type IngestionMode = 'upload' | 'record';
 export type ProcessingStage = 'idle' | 'uploading' | 'transcribing' | 'completed' | 'error';
+export type ActiveTab = 'overview' | 'tasks' | 'chat' | 'transcript' | 'history';
 
 @Component({
   selector: 'app-root',
@@ -40,15 +70,31 @@ export type ProcessingStage = 'idle' | 'uploading' | 'transcribing' | 'completed
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
-export class App {
+export class App implements OnDestroy {
   private http = inject(HttpClient);
   readonly backendUrl = 'http://127.0.0.1:8000/process';
+  readonly chatUrl = 'http://127.0.0.1:8000/chat';
+
+  // Navigation & UI State
+  ingestionMode = signal<IngestionMode>('upload');
+  activeTab = signal<ActiveTab>('overview');
 
   // File state
   selectedFile = signal<File | null>(null);
   fileSizeFormatted = signal<string>('');
   isDragging = signal<boolean>(false);
   audioPreviewUrl = signal<string | null>(null);
+
+  // Live Microphone Recording State
+  isRecording = signal<boolean>(false);
+  recordingSeconds = signal<number>(0);
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private recordingInterval: any = null;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private animationFrameId: number | null = null;
+  @ViewChild('visualizerCanvas') visualizerCanvas!: ElementRef<HTMLCanvasElement>;
 
   // Processing state
   uploadProgress = signal<number>(0);
@@ -64,20 +110,63 @@ export class App {
   actionItems = signal<ActionItem[]>([]);
   segments = signal<TranscriptSegment[]>([]);
   insights = signal<MeetingInsights | null>(null);
+  sentiment = signal<SentimentData | null>(null);
 
   // Search & Filter state
   searchQuery = signal<string>('');
+  priorityFilter = signal<string>('all');
 
   filteredSegments = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
     const segs = this.segments();
     if (!q) return segs;
-    return segs.filter(s => s.text.toLowerCase().includes(q) || s.timestamp.toLowerCase().includes(q));
+    return segs.filter(s => 
+      s.text.toLowerCase().includes(q) || 
+      s.speaker.toLowerCase().includes(q) || 
+      s.timestamp.toLowerCase().includes(q)
+    );
   });
+
+  filteredActionItems = computed(() => {
+    const filter = this.priorityFilter();
+    const items = this.actionItems();
+    if (filter === 'all') return items;
+    return items.filter(item => item.priority.toLowerCase() === filter.toLowerCase());
+  });
+
+  // Chat State
+  chatMessages = signal<ChatMessage[]>([
+    {
+      sender: 'ai',
+      text: "👋 Hi! I'm your Meeting AI Assistant. Ask me anything about this discussion, action items, deadlines, or request a drafted email.",
+      timestamp: 'Just now'
+    }
+  ]);
+  chatInput = signal<string>('');
+  isChatLoading = signal<boolean>(false);
+  suggestedPrompts = signal<string[]>([
+    'What are the critical deadlines?',
+    'Summarize each person\'s tasks',
+    'What decisions were agreed upon?',
+    'Draft a team follow-up email'
+  ]);
+
+  // Saved Meeting History
+  savedMeetings = signal<SavedMeeting[]>([]);
 
   // UI feedback
   copyFeedback = signal<string | null>(null);
   private copyTimeout: any = null;
+
+  constructor() {
+    this.loadSavedMeetingsFromStorage();
+  }
+
+  ngOnDestroy(): void {
+    this.stopRecordingCleanup();
+  }
+
+  // --- File Upload Handling ---
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -114,7 +203,7 @@ export class App {
       this.audioPreviewUrl.set(null);
     }
 
-    const validExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.webm', '.mp4', '.mov'];
+    const validExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.webm', '.mp4', '.mov', '.mkv'];
     const hasValidExt = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
     const isAudioOrVideo = file.type.startsWith('audio/') || file.type.startsWith('video/') || hasValidExt;
 
@@ -138,10 +227,137 @@ export class App {
     this.statusMessage.set('');
     this.errorMessage.set('');
 
-    if (file.type.startsWith('audio/')) {
+    if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
       this.audioPreviewUrl.set(URL.createObjectURL(file));
     }
   }
+
+  // --- Live Microphone Recording ---
+
+  async startRecording(): Promise<void> {
+    try {
+      this.errorMessage.set('');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      this.audioChunks = [];
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      };
+
+      this.mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+        const recordedFile = new File([audioBlob], `recorded_meeting_${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`, { type: mimeType });
+        this.handleFile(recordedFile);
+        this.stopRecordingCleanup();
+      };
+
+      this.mediaRecorder.start(250);
+      this.isRecording.set(true);
+      this.recordingSeconds.set(0);
+
+      // Start recording timer
+      this.recordingInterval = setInterval(() => {
+        this.recordingSeconds.update(s => s + 1);
+      }, 1000);
+
+      // Start visualizer
+      this.setupVisualizer(stream);
+
+    } catch (err: any) {
+      console.error('Microphone access error:', err);
+      this.errorMessage.set('Could not access microphone. Please allow microphone permissions in your browser.');
+      this.processingStage.set('error');
+    }
+  }
+
+  stopRecording(): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+      this.isRecording.set(false);
+    }
+  }
+
+  cancelRecording(): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.stop();
+    }
+    this.stopRecordingCleanup();
+    this.isRecording.set(false);
+    this.recordingSeconds.set(0);
+  }
+
+  private setupVisualizer(stream: MediaStream): void {
+    try {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = this.audioContext.createMediaStreamSource(stream);
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 64;
+      source.connect(this.analyser);
+
+      const canvas = this.visualizerCanvas?.nativeElement;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const bufferLength = this.analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const draw = () => {
+        if (!this.isRecording()) return;
+        this.animationFrameId = requestAnimationFrame(draw);
+
+        this.analyser!.getByteFrequencyData(dataArray);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const barWidth = (canvas.width / bufferLength) * 1.5;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = (dataArray[i] / 255) * canvas.height;
+          const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+          gradient.addColorStop(0, '#3b82f6');
+          gradient.addColorStop(1, '#8b5cf6');
+
+          ctx.fillStyle = gradient;
+          ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
+          x += barWidth + 1;
+        }
+      };
+
+      draw();
+    } catch (e) {
+      console.warn('Could not initialize audio visualizer:', e);
+    }
+  }
+
+  private stopRecordingCleanup(): void {
+    if (this.recordingInterval) {
+      clearInterval(this.recordingInterval);
+      this.recordingInterval = null;
+    }
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+  }
+
+  formatRecordingTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // --- Processing & AI Pipeline ---
 
   uploadFile(): void {
     const file = this.selectedFile();
@@ -155,6 +371,7 @@ export class App {
     this.actionItems.set([]);
     this.segments.set([]);
     this.insights.set(null);
+    this.sentiment.set(null);
     this.searchQuery.set('');
 
     this.uploadProgress.set(0);
@@ -174,7 +391,7 @@ export class App {
           this.uploadProgress.set(percent);
           if (percent === 100) {
             this.processingStage.set('transcribing');
-            this.statusMessage.set('Transcribing with Whisper & extracting decisions and action items...');
+            this.statusMessage.set('Transcribing with Whisper & extracting intelligence...');
           }
         }
 
@@ -189,6 +406,7 @@ export class App {
 
           this.processingStage.set('completed');
           this.statusMessage.set('Meeting analyzed successfully!');
+          this.activeTab.set('overview');
 
           this.transcript.set(body.transcript || '');
           this.summary.set(body.summary || '');
@@ -196,6 +414,7 @@ export class App {
           this.decisions.set(body.decisions || []);
           this.segments.set(body.segments || []);
           this.insights.set(body.insights || null);
+          this.sentiment.set(body.sentiment || null);
 
           if (body.structured_action_items && Array.isArray(body.structured_action_items)) {
             const mapped: ActionItem[] = body.structured_action_items.map((item: any) => ({
@@ -207,6 +426,9 @@ export class App {
             }));
             this.actionItems.set(mapped);
           }
+
+          // Save automatically to history
+          this.saveCurrentMeetingToHistory();
         }
       },
       error: (err) => {
@@ -217,6 +439,134 @@ export class App {
       }
     });
   }
+
+  // --- Interactive "Ask AI" Chatbot ---
+
+  sendChatMessage(): void {
+    const text = this.chatInput().trim();
+    if (!text || this.isChatLoading()) return;
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.chatMessages.update(msgs => [...msgs, { sender: 'user', text, timestamp: time }]);
+    this.chatInput.set('');
+    this.isChatLoading.set(true);
+
+    const payload = {
+      question: text,
+      transcript: this.transcript(),
+      summary: this.summary(),
+      action_items: this.actionItems(),
+      decisions: this.decisions()
+    };
+
+    this.http.post<any>(this.chatUrl, payload).subscribe({
+      next: (res) => {
+        this.isChatLoading.set(false);
+        const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        this.chatMessages.update(msgs => [
+          ...msgs,
+          { sender: 'ai', text: res.answer, timestamp: replyTime }
+        ]);
+
+        if (res.suggested_followups && Array.isArray(res.suggested_followups)) {
+          this.suggestedPrompts.set(res.suggested_followups);
+        }
+      },
+      error: (err) => {
+        this.isChatLoading.set(false);
+        this.chatMessages.update(msgs => [
+          ...msgs,
+          { sender: 'ai', text: 'Sorry, I encountered an issue connecting to the chat service. Please check your backend connection.', timestamp: 'Now' }
+        ]);
+      }
+    });
+  }
+
+  sendSuggestedPrompt(prompt: string): void {
+    this.chatInput.set(prompt);
+    this.sendChatMessage();
+  }
+
+  // --- Speaker Rename & Edit ---
+
+  editSpeaker(oldName: string): void {
+    const newName = prompt(`Enter new name for "${oldName}":`, oldName);
+    if (!newName || newName.trim() === '' || newName === oldName) return;
+
+    this.segments.update(segs => 
+      segs.map(s => s.speaker === oldName ? { ...s, speaker: newName.trim() } : s)
+    );
+    this.triggerCopyFeedback(`Updated speaker name to "${newName.trim()}"`);
+  }
+
+  // --- Meeting History Persistence ---
+
+  private saveCurrentMeetingToHistory(): void {
+    const title = this.selectedFile()?.name.replace(/\.[^/.]+$/, '') || `Meeting ${new Date().toLocaleDateString()}`;
+    const newEntry: SavedMeeting = {
+      id: `meeting_${Date.now()}`,
+      title,
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      duration: this.insights()?.duration_formatted || '0m',
+      summary: this.summary(),
+      keyPoints: this.keyPoints(),
+      decisions: this.decisions(),
+      actionItems: this.actionItems(),
+      segments: this.segments(),
+      insights: this.insights()!,
+      sentiment: this.sentiment()!
+    };
+
+    this.savedMeetings.update(list => [newEntry, ...list.slice(0, 9)]);
+    this.syncHistoryStorage();
+  }
+
+  loadSavedMeeting(meeting: SavedMeeting): void {
+    this.summary.set(meeting.summary);
+    this.keyPoints.set(meeting.keyPoints);
+    this.decisions.set(meeting.decisions);
+    this.actionItems.set(meeting.actionItems);
+    this.segments.set(meeting.segments);
+    this.insights.set(meeting.insights);
+    this.sentiment.set(meeting.sentiment);
+    this.transcript.set(meeting.segments.map(s => `[${s.timestamp}] ${s.speaker}: ${s.text}`).join('\n') || meeting.summary);
+    
+    this.processingStage.set('completed');
+    this.activeTab.set('overview');
+    this.triggerCopyFeedback(`Loaded "${meeting.title}" from history`);
+  }
+
+  deleteSavedMeeting(id: string, event: Event): void {
+    event.stopPropagation();
+    this.savedMeetings.update(list => list.filter(m => m.id !== id));
+    this.syncHistoryStorage();
+    this.triggerCopyFeedback('Deleted meeting from history');
+  }
+
+  private syncHistoryStorage(): void {
+    try {
+      if (typeof window !== 'undefined' && 'localStorage' in window && window.localStorage) {
+        window.localStorage.setItem('meeting_ai_history', JSON.stringify(this.savedMeetings()));
+      }
+    } catch {
+      // Storage unavailable in SSR/test environment
+    }
+  }
+
+  private loadSavedMeetingsFromStorage(): void {
+    try {
+      if (typeof window !== 'undefined' && 'localStorage' in window && window.localStorage) {
+        const raw = window.localStorage.getItem('meeting_ai_history');
+        if (raw) {
+          this.savedMeetings.set(JSON.parse(raw));
+        }
+      }
+    } catch {
+      // Storage unavailable in SSR/test environment
+    }
+  }
+
+  // --- Actions & Helpers ---
 
   toggleActionItem(index: number): void {
     this.actionItems.update(items => {
@@ -258,6 +608,9 @@ export class App {
     if (this.insights()) {
       content += `Duration: ${this.insights()!.duration_formatted} | Words: ${this.insights()!.word_count} | Decisions: ${this.insights()!.decisions_count} | Actions: ${this.insights()!.action_items_count}\n`;
     }
+    if (this.sentiment()) {
+      content += `Sentiment: ${this.sentiment()!.overall} (Score: ${this.sentiment()!.score}/100) | Tone: ${this.sentiment()!.tone}\n`;
+    }
     content += `\n=========================================\n`;
     content += `📝 EXECUTIVE SUMMARY\n`;
     content += `=========================================\n${this.summary()}\n\n`;
@@ -284,7 +637,7 @@ export class App {
     content += `=========================================\n📄 FULL TRANSCRIPT\n=========================================\n`;
     if (this.segments().length > 0) {
       this.segments().forEach(s => {
-        content += `[${s.timestamp}] ${s.text}\n`;
+        content += `[${s.timestamp}] ${s.speaker}: ${s.text}\n`;
       });
     } else {
       content += `${this.transcript()}\n`;
@@ -329,7 +682,9 @@ export class App {
     this.actionItems.set([]);
     this.segments.set([]);
     this.insights.set(null);
+    this.sentiment.set(null);
     this.searchQuery.set('');
+    this.activeTab.set('overview');
   }
 
   formatFileSize(bytes: number): string {

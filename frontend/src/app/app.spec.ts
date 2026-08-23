@@ -36,10 +36,12 @@ describe('App', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Meeting-to-Action AI');
   });
 
-  it('should initialize with idle state and empty results', () => {
+  it('should initialize with idle state and default modes', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app.processingStage()).toBe('idle');
+    expect(app.ingestionMode()).toBe('upload');
+    expect(app.activeTab()).toBe('overview');
     expect(app.uploadProgress()).toBe(0);
     expect(app.transcript()).toBe('');
     expect(app.summary()).toBe('');
@@ -67,8 +69,8 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     app.segments.set([
-      { timestamp: '00:01', start: 1, end: 5, text: 'Discussing the backend API' },
-      { timestamp: '00:15', start: 15, end: 20, text: 'Designing the Angular UI' }
+      { timestamp: '00:01', start: 1, end: 5, speaker: 'Speaker 1', text: 'Discussing the backend API' },
+      { timestamp: '00:15', start: 15, end: 20, speaker: 'Speaker 2', text: 'Designing the Angular UI' }
     ]);
 
     expect(app.filteredSegments().length).toBe(2);
@@ -81,11 +83,25 @@ describe('App', () => {
     expect(app.filteredSegments().length).toBe(0);
   });
 
-  it('should format file sizes properly', () => {
+  it('should switch ingestion modes and active tabs', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+
+    app.ingestionMode.set('record');
+    expect(app.ingestionMode()).toBe('record');
+
+    app.activeTab.set('chat');
+    expect(app.activeTab()).toBe('chat');
+  });
+
+  it('should format file sizes and recording timers properly', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app.formatFileSize(0)).toBe('0 B');
     expect(app.formatFileSize(1024)).toBe('1 KB');
     expect(app.formatFileSize(1024 * 1024 * 5)).toBe('5 MB');
+
+    expect(app.formatRecordingTime(0)).toBe('00:00');
+    expect(app.formatRecordingTime(65)).toBe('01:05');
   });
 });

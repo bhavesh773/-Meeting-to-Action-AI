@@ -63,7 +63,56 @@
   box-shadow: var(--card-shadow);
 }
 
-/* Upload Dropzone (Page 1) */
+/* Mode Switcher Tabs */
+.mode-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+
+  .mode-tab-btn {
+    padding: 10px 20px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover:not(:disabled) {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    &.active {
+      color: #ffffff;
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .history-tab-btn {
+    border-color: rgba(139, 92, 246, 0.25);
+    color: #c4b5fd;
+
+    &.active {
+      background: rgba(139, 92, 246, 0.2);
+      border-color: rgba(139, 92, 246, 0.45);
+    }
+  }
+}
+
+/* Upload Dropzone */
 .dropzone {
   position: relative;
   border: 2px dashed rgba(255, 255, 255, 0.14);
@@ -202,7 +251,106 @@
   }
 }
 
-/* Buttons & Toolbar */
+/* Live Microphone Recorder Box */
+.recorder-card {
+  border: 2px solid rgba(244, 63, 94, 0.25);
+  background: rgba(244, 63, 94, 0.03);
+  border-radius: 18px;
+  padding: 28px 24px;
+  text-align: center;
+
+  .recorder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 600px;
+    margin: 0 auto 16px;
+
+    .rec-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-muted);
+
+      .rec-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #64748b;
+      }
+
+      &.recording {
+        color: #fb7185;
+
+        .rec-dot {
+          background: #f43f5e;
+          box-shadow: 0 0 10px #f43f5e;
+          animation: pulse 1s infinite;
+        }
+      }
+    }
+
+    .rec-timer {
+      font-family: monospace;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 12px;
+      border-radius: 8px;
+    }
+  }
+
+  .visualizer-container {
+    position: relative;
+    max-width: 600px;
+    height: 90px;
+    margin: 0 auto 20px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    overflow: hidden;
+
+    .visualizer-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .visualizer-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-subtle);
+      font-size: 0.88rem;
+    }
+  }
+
+  .recorder-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+
+    .recorded-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+
+      .rec-file-badge {
+        font-weight: 600;
+        color: #34d399;
+        font-size: 0.9rem;
+      }
+    }
+  }
+}
+
+/* Buttons */
 .action-bar {
   display: flex;
   align-items: center;
@@ -252,6 +400,26 @@
   }
 }
 
+.btn-record {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
+
+  &:hover {
+    background: linear-gradient(135deg, #be123c, #9f1239);
+  }
+}
+
+.btn-stop {
+  background: #f59e0b;
+  color: #000000;
+  font-weight: 700;
+
+  &:hover {
+    background: #d97706;
+  }
+}
+
 .btn-outline {
   background: transparent;
   color: var(--text-muted);
@@ -297,7 +465,7 @@
   animation: spin 0.8s linear infinite;
 }
 
-/* Processing Tracker (Page 2) */
+/* Processing Tracker */
 .processing-tracker {
   margin-top: 28px;
   padding: 20px;
@@ -443,12 +611,94 @@
   }
 }
 
-/* Meeting Insights Bar (PDF Section 16) */
+/* Results Section & Dashboard Tabs */
+.results-section {
+  margin-top: 36px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 32px;
+
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 14px;
+
+    h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-family: var(--font-display);
+    }
+
+    .download-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+.dashboard-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+  overflow-x: auto;
+
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+
+    &:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    &.active {
+      color: #60a5fa;
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    .tab-badge {
+      padding: 1px 6px;
+      font-size: 0.72rem;
+      border-radius: 10px;
+      background: #3b82f6;
+      color: #ffffff;
+    }
+  }
+
+  .chat-tab-btn.active {
+    color: #c084fc;
+    background: rgba(168, 85, 247, 0.15);
+  }
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Meeting Insights Bar */
 .insights-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
-  margin-bottom: 28px;
 
   .insight-card {
     display: flex;
@@ -488,40 +738,6 @@
         font-weight: 600;
       }
     }
-  }
-}
-
-/* Results Section (Page 3) */
-.results-section {
-  margin-top: 36px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 32px;
-
-  .results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 14px;
-
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-family: var(--font-display);
-    }
-
-    .download-toolbar {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-  }
-
-  .cards-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 22px;
   }
 }
 
@@ -567,7 +783,81 @@
   }
 }
 
-/* Key Points (PDF Section 9) */
+/* Sentiment & Tone Card */
+.sentiment-card {
+  .sentiment-pill {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .sentiment-body {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+
+    .sentiment-score-box {
+      text-align: center;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      .score-number {
+        font-size: 1.8rem;
+        font-weight: 800;
+        font-family: var(--font-display);
+        color: #60a5fa;
+      }
+
+      .score-label {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+    }
+
+    .sentiment-details {
+      flex: 1;
+
+      .tone-desc {
+        margin: 0 0 10px;
+        color: #e2e8f0;
+        font-size: 0.92rem;
+      }
+
+      .topic-chips {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        .topic-label {
+          font-size: 0.78rem;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+
+        .topic-tag {
+          font-size: 0.75rem;
+          padding: 2px 8px;
+          background: rgba(139, 92, 246, 0.15);
+          color: #c4b5fd;
+          border-radius: 6px;
+          font-weight: 600;
+        }
+      }
+    }
+  }
+}
+
+/* Key Points */
 .keypoints-list {
   margin: 0;
   padding-left: 20px;
@@ -584,7 +874,7 @@
   }
 }
 
-/* Decisions Table (PDF Section 10) */
+/* Decisions Table */
 .decisions-table {
   display: flex;
   flex-direction: column;
@@ -620,7 +910,28 @@
   }
 }
 
-/* Action Items Checklist (PDF Section 11, 12, 13, 14) */
+/* Action Items Card */
+.action-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .priority-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+
+    option {
+      background: #1e293b;
+      color: #ffffff;
+    }
+  }
+}
+
 .action-list {
   display: flex;
   flex-direction: column;
@@ -762,7 +1073,178 @@
   }
 }
 
-/* Transcript Search & Segments (PDF Section 7 & 17) */
+/* "Ask AI" Interactive Chatbot */
+.chat-card {
+  padding: 20px;
+
+  .chat-header {
+    margin-bottom: 14px;
+
+    .chat-subtitle {
+      margin: 2px 0 0;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+  }
+
+  .suggested-prompts-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+
+    .prompt-chip {
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      color: #e9d5ff;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        background: rgba(168, 85, 247, 0.25);
+        transform: translateY(-1px);
+      }
+    }
+  }
+
+  .chat-messages-box {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 16px;
+    min-height: 240px;
+    max-height: 380px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+
+    .message-bubble {
+      display: flex;
+      gap: 10px;
+      max-width: 85%;
+
+      &.user {
+        align-self: flex-end;
+        flex-direction: row-reverse;
+
+        .message-text {
+          background: #2563eb;
+          color: #ffffff;
+          border-radius: 14px 14px 2px 14px;
+        }
+
+        .message-time {
+          text-align: right;
+        }
+      }
+
+      &.ai {
+        align-self: flex-start;
+
+        .message-text {
+          background: rgba(255, 255, 255, 0.07);
+          color: #f1f5f9;
+          border-radius: 14px 14px 14px 2px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          white-space: pre-wrap;
+        }
+      }
+
+      .message-sender-avatar {
+        font-size: 1.2rem;
+      }
+
+      .message-text-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .message-text {
+          padding: 10px 14px;
+          font-size: 0.92rem;
+          line-height: 1.5;
+        }
+
+        .message-time {
+          font-size: 0.7rem;
+          color: var(--text-subtle);
+          padding: 0 4px;
+        }
+      }
+    }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 10px 14px;
+
+      span {
+        width: 6px;
+        height: 6px;
+        background: #94a3b8;
+        border-radius: 50%;
+        animation: pulse 1s infinite;
+
+        &:nth-child(2) { animation-delay: 0.2s; }
+        &:nth-child(3) { animation-delay: 0.4s; }
+      }
+    }
+  }
+
+  .chat-input-bar {
+    display: flex;
+    gap: 10px;
+
+    .chat-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: #ffffff;
+      font-size: 0.92rem;
+
+      &:focus {
+        outline: none;
+        border-color: #a855f7;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      &::placeholder {
+        color: var(--text-subtle);
+      }
+    }
+
+    .btn-send {
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+      color: #ffffff;
+      border: none;
+      font-weight: 700;
+      padding: 0 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);
+      }
+    }
+  }
+}
+
+/* Transcript Search & Segments */
 .transcript-search-bar {
   display: flex;
   align-items: center;
@@ -783,7 +1265,6 @@
     border: none;
     color: #ffffff;
     font-size: 0.92rem;
-    font-family: inherit;
 
     &:focus {
       outline: none;
@@ -820,7 +1301,7 @@
     .segment-row {
       display: flex;
       align-items: flex-start;
-      gap: 14px;
+      gap: 12px;
       padding: 6px 8px;
       border-radius: 6px;
       transition: background 0.15s;
@@ -840,6 +1321,21 @@
         white-space: nowrap;
       }
 
+      .segment-speaker {
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #c4b5fd;
+        background: rgba(139, 92, 246, 0.15);
+        padding: 2px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+
+        &:hover {
+          background: rgba(139, 92, 246, 0.3);
+        }
+      }
+
       .segment-text {
         font-size: 0.92rem;
         line-height: 1.5;
@@ -856,6 +1352,82 @@
     font-size: 0.88rem;
     line-height: 1.6;
     color: #cbd5e1;
+  }
+}
+
+/* Saved Meeting History */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .history-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(59, 130, 246, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .history-main-info {
+      .history-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 6px;
+      }
+
+      .history-meta {
+        display: flex;
+        gap: 14px;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        flex-wrap: wrap;
+      }
+    }
+
+    .history-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .btn-history-load {
+        background: rgba(59, 130, 246, 0.2);
+        color: #93c5fd;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+          background: rgba(59, 130, 246, 0.35);
+        }
+      }
+
+      .btn-history-delete {
+        background: transparent;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+        padding: 6px;
+        border-radius: 6px;
+
+        &:hover {
+          background: rgba(244, 63, 94, 0.2);
+        }
+      }
+    }
   }
 }
 
@@ -879,7 +1451,7 @@
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Print styles for PDF Export (PDF Section 18) */
+/* Print styles for PDF Export */
 @media print {
   body {
     background: #ffffff !important;
@@ -887,11 +1459,15 @@
   }
 
   .header .brand-badge,
+  .mode-tabs,
   .dropzone,
+  .recorder-card,
   .action-bar,
   .download-toolbar,
+  .dashboard-tabs,
   .btn-copy,
   .transcript-search-bar,
+  .chat-card,
   .toast-notification {
     display: none !important;
   }
@@ -952,7 +1528,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 640px) {
   .header h1 {
     font-size: 2rem;
