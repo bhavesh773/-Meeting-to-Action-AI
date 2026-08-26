@@ -5,10 +5,11 @@ import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import whisper
+from diarization import diarize_and_align, format_timestamp
 
 app = FastAPI(
     title="Meeting-to-Action AI API (Next-Gen)",
@@ -354,8 +355,8 @@ def analyze_sentiment_and_tone(transcript: str) -> Dict[str, Any]:
     }
 
 
-def safe_transcribe(file_path: str) -> Dict[str, Any]:
-    """Safely loads, decodes, and transcribes audio with Whisper."""
+def safe_transcribe(file_path: str, expected_speakers: Optional[int] = None) -> Dict[str, Any]:
+    """Safely loads, decodes, transcribes audio with Whisper, and performs acoustic speaker diarization."""
     try:
         audio = whisper.load_audio(file_path)
     except Exception as decode_err:
@@ -369,7 +370,9 @@ def safe_transcribe(file_path: str) -> Dict[str, Any]:
         return {
             "text": "No audible audio stream found in the uploaded file.",
             "duration": 0.0,
-            "segments": []
+            "segments": [],
+            "num_speakers": 0,
+            "speaker_stats": []
         }
 
     duration_seconds = len(audio) / 16000.0
@@ -385,39 +388,20 @@ def safe_transcribe(file_path: str) -> Dict[str, Any]:
         text = result.get("text", "").strip()
         raw_segments = result.get("segments", [])
 
-        # Assign heuristic speaker alternation
-        formatted_segments = []
-        current_speaker_idx = 1
-        last_end = 0.0
-
-        for seg in raw_segments:
-            start = seg.get("start", 0.0)
-            # If there's a significant pause (> 1.2s), alternate speaker hypothesis
-            if start - last_end > 1.2 and len(formatted_segments) > 0:
-                current_speaker_idx = 2 if current_speaker_idx == 1 else 1
-
-            last_end = seg.get("end", 0.0)
-
-            # Check if speaker name is explicitly in the segment text
-            speaker_label = f"Speaker {current_speaker_idx}"
-            text_seg = seg.get("text", "").strip()
-            name_match = re.match(r'^([A-Z][a-z]+):\s*(.+)', text_seg)
-            if name_match:
-                speaker_label = name_match.group(1)
-                text_seg = name_match.group(2)
-
-            formatted_segments.append({
-                "timestamp": format_timestamp(start),
-                "start": start,
-                "end": seg.get("end", 0.0),
-                "speaker": speaker_label,
-                "text": text_seg
-            })
+        # Run acoustic speaker diarization and alignment
+        diarized = diarize_and_align(
+            audio=audio,
+            sample_rate=16000,
+            raw_segments=raw_segments,
+            expected_speakers=expected_speakers
+        )
 
         return {
             "text": text if text else "No audible speech was detected in the provided file.",
             "duration": duration_seconds,
-            "segments": formatted_segments
+            "segments": diarized["segments"],
+            "num_speakers": diarized["num_speakers"],
+            "speaker_stats": diarized["speaker_stats"]
         }
     except Exception as transcribe_err:
         err_str = str(transcribe_err).lower()
@@ -425,12 +409,30 @@ def safe_transcribe(file_path: str) -> Dict[str, Any]:
             return {
                 "text": "No audible speech was detected in the provided file.",
                 "duration": duration_seconds,
-                "segments": []
+                "segments": [],
+                "num_speakers": 0,
+                "speaker_stats": []
             }
         raise transcribe_err
 
 
 # --- API Models ---
+
+class SpeakerColorThemeModel(BaseModel):
+    bg: str
+    border: str
+    text: str
+    name: str
+
+class SpeakerStatModel(BaseModel):
+    speaker: str
+    speaker_index: int
+    talk_time_seconds: float
+    talk_time_formatted: str
+    talk_time_percentage: float
+    word_count: int
+    segments_count: int
+    color_theme: SpeakerColorThemeModel
 
 class ActionItemModel(BaseModel):
     task: str
@@ -447,6 +449,7 @@ class SegmentModel(BaseModel):
     start: float
     end: float
     speaker: str
+    speaker_id: Optional[int] = 1
     text: str
 
 class InsightsModel(BaseModel):
@@ -455,6 +458,7 @@ class InsightsModel(BaseModel):
     word_count: int
     action_items_count: int
     decisions_count: int
+    num_speakers: int
 
 class SentimentModel(BaseModel):
     overall: str
@@ -472,6 +476,8 @@ class ProcessResponse(BaseModel):
     action_items: List[str]
     structured_action_items: List[ActionItemModel]
     segments: List[SegmentModel]
+    num_speakers: int
+    speaker_stats: List[SpeakerStatModel]
     insights: InsightsModel
     sentiment: SentimentModel
     error: Optional[str] = None
@@ -482,6 +488,7 @@ class ChatRequest(BaseModel):
     summary: Optional[str] = ""
     action_items: Optional[List[Dict[str, Any]]] = []
     decisions: Optional[List[Dict[str, Any]]] = []
+    speaker_stats: Optional[List[Dict[str, Any]]] = []
 
 class ChatResponse(BaseModel):
     answer: str
@@ -495,7 +502,7 @@ def home():
     return {
         "message": "Meeting-to-Action AI Backend Running 🚀",
         "status": "online",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "endpoints": {
             "health": "/",
             "process": "/process (POST)",
@@ -505,7 +512,10 @@ def home():
 
 
 @app.post("/process", response_model=ProcessResponse)
-async def process_meeting(file: UploadFile = File(...)):
+async def process_meeting(
+    file: UploadFile = File(...),
+    expected_speakers: Optional[int] = Form(None)
+):
     if not file or not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -545,10 +555,12 @@ async def process_meeting(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        transcribe_data = await asyncio.to_thread(safe_transcribe, file_path)
+        transcribe_data = await asyncio.to_thread(safe_transcribe, file_path, expected_speakers)
         transcript = transcribe_data["text"]
         duration_sec = transcribe_data["duration"]
         segments = transcribe_data["segments"]
+        num_speakers = transcribe_data["num_speakers"]
+        speaker_stats = transcribe_data["speaker_stats"]
 
         # Information Extraction Pipeline
         summary = generate_smart_summary(transcript)
@@ -572,7 +584,8 @@ async def process_meeting(file: UploadFile = File(...)):
             duration_seconds=round(duration_sec, 1),
             word_count=words,
             action_items_count=len(structured_actions),
-            decisions_count=len(decisions)
+            decisions_count=len(decisions),
+            num_speakers=num_speakers
         )
 
         return ProcessResponse(
@@ -585,6 +598,8 @@ async def process_meeting(file: UploadFile = File(...)):
             action_items=string_actions,
             structured_action_items=[ActionItemModel(**item) for item in structured_actions],
             segments=[SegmentModel(**seg) for seg in segments],
+            num_speakers=num_speakers,
+            speaker_stats=[SpeakerStatModel(**stat) for stat in speaker_stats],
             insights=insights,
             sentiment=SentimentModel(**sentiment_data)
         )
@@ -619,7 +634,19 @@ async def chat_with_meeting(req: ChatRequest):
 
     sentences = split_into_sentences(transcript)
 
-    # 1. Questions about Deadlines / Schedule / Dates
+    # 1. Questions about Speakers / Participants / Talk-Time
+    if any(w in q for w in ["speaker", "who spoke", "participants", "how many people", "talk time", "who talked the most"]):
+        if req.speaker_stats and len(req.speaker_stats) > 0:
+            total_spk = len(req.speaker_stats)
+            ans = f"There were **{total_spk} distinct speaker{'s' if total_spk > 1 else ''}** identified in this meeting:\n\n"
+            for stat in req.speaker_stats:
+                ans += f"• **{stat.get('speaker')}**: {stat.get('talk_time_formatted')} ({stat.get('talk_time_percentage')}%) — {stat.get('word_count')} words across {stat.get('segments_count')} turns\n"
+            return ChatResponse(
+                answer=ans.strip(),
+                suggested_followups=["What were the key takeaways?", "Who is assigned to each action item?", "Draft a recap email"]
+            )
+
+    # 2. Questions about Deadlines / Schedule / Dates
     if any(w in q for w in ["deadline", "due", "when", "date", "schedule", "time", "friday", "monday"]):
         deadline_matches = [s for s in sentences if any(w in s.lower() for w in ["deadline", "by", "before", "due", "friday", "monday", "august", "tomorrow", "next week"])]
         if deadline_matches:
@@ -631,7 +658,7 @@ async def chat_with_meeting(req: ChatRequest):
                 suggested_followups=["Who is assigned to each task?", "What are the key decisions?", "Give me a 2-sentence summary"]
             )
 
-    # 2. Questions about Tasks / Action Items / Responsibilities
+    # 3. Questions about Tasks / Action Items / Responsibilities
     if any(w in q for w in ["task", "action", "responsibility", "assigned", "who will", "who is doing", "what needs to be done"]):
         if req.action_items and len(req.action_items) > 0:
             ans = "Here are the action items and assigned responsibilities:\n\n"
@@ -642,7 +669,7 @@ async def chat_with_meeting(req: ChatRequest):
                 suggested_followups=["What are the highest priority items?", "Draft a follow-up email for the team", "What decisions were agreed on?"]
             )
 
-    # 3. Questions about Decisions
+    # 4. Questions about Decisions
     if any(w in q for w in ["decision", "decide", "agreed", "choice", "concluded"]):
         if req.decisions and len(req.decisions) > 0:
             ans = "Here are the key decisions finalized during the discussion:\n\n"
@@ -653,7 +680,7 @@ async def chat_with_meeting(req: ChatRequest):
                 suggested_followups=["What are the next steps?", "Who is responsible for the frontend?", "Summarize the meeting"]
             )
 
-    # 4. Draft Email / Slack Update
+    # 5. Draft Email / Slack Update
     if any(w in q for w in ["email", "slack", "message", "draft", "write a follow up"]):
         ans = "Here is a drafted follow-up email ready to send:\n\n"
         ans += "**Subject:** Meeting Recap & Next Steps\n\n"
@@ -669,7 +696,7 @@ async def chat_with_meeting(req: ChatRequest):
             suggested_followups=["List all decisions", "What are the deadlines?", "Show the full transcript"]
         )
 
-    # 5. Semantic keyword search match in sentences
+    # 6. Semantic keyword search match in sentences
     words = [w for w in re.findall(r'\b\w{3,}\b', q) if w not in ["what", "when", "where", "who", "which", "how", "the", "and", "about", "tell", "show"]]
     relevant = []
     for s in sentences:

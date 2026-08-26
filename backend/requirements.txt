@@ -5,3 +5,6 @@ openai-whisper>=20231117
 torch>=2.0.0
 pydantic>=2.0.0
 requests>=2.31.0
+scikit-learn>=1.9.0
+scipy>=1.17.0
+soundfile>=0.14.0

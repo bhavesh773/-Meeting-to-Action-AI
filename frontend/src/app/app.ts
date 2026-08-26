@@ -21,7 +21,26 @@ export interface TranscriptSegment {
   start: number;
   end: number;
   speaker: string;
+  speaker_id?: number;
   text: string;
+}
+
+export interface SpeakerColorTheme {
+  bg: string;
+  border: string;
+  text: string;
+  name: string;
+}
+
+export interface SpeakerStat {
+  speaker: string;
+  speaker_index: number;
+  talk_time_seconds: number;
+  talk_time_formatted: string;
+  talk_time_percentage: number;
+  word_count: number;
+  segments_count: number;
+  color_theme: SpeakerColorTheme;
 }
 
 export interface MeetingInsights {
@@ -30,6 +49,7 @@ export interface MeetingInsights {
   word_count: number;
   action_items_count: number;
   decisions_count: number;
+  num_speakers?: number;
 }
 
 export interface SentimentData {
@@ -57,6 +77,8 @@ export interface SavedMeeting {
   segments: TranscriptSegment[];
   insights: MeetingInsights;
   sentiment: SentimentData;
+  numSpeakers?: number;
+  speakerStats?: SpeakerStat[];
 }
 
 export type IngestionMode = 'upload' | 'record';
@@ -84,6 +106,7 @@ export class App implements OnDestroy {
   fileSizeFormatted = signal<string>('');
   isDragging = signal<boolean>(false);
   audioPreviewUrl = signal<string | null>(null);
+  expectedSpeakersHint = signal<string>('auto');
 
   // Live Microphone Recording State
   isRecording = signal<boolean>(false);
@@ -111,22 +134,31 @@ export class App implements OnDestroy {
   decisions = signal<Decision[]>([]);
   actionItems = signal<ActionItem[]>([]);
   segments = signal<TranscriptSegment[]>([]);
+  numSpeakers = signal<number>(0);
+  speakerStats = signal<SpeakerStat[]>([]);
   insights = signal<MeetingInsights | null>(null);
   sentiment = signal<SentimentData | null>(null);
 
   // Search & Filter state
   searchQuery = signal<string>('');
   priorityFilter = signal<string>('all');
+  selectedSpeakerFilter = signal<string>('all');
 
   filteredSegments = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
+    const spkFilter = this.selectedSpeakerFilter();
     const segs = this.segments();
-    if (!q) return segs;
-    return segs.filter(s => 
-      s.text.toLowerCase().includes(q) || 
-      s.speaker.toLowerCase().includes(q) || 
-      s.timestamp.toLowerCase().includes(q)
-    );
+    
+    return segs.filter(s => {
+      const matchesSpeaker = spkFilter === 'all' || s.speaker === spkFilter;
+      if (!matchesSpeaker) return false;
+      if (!q) return true;
+      return (
+        s.text.toLowerCase().includes(q) || 
+        s.speaker.toLowerCase().includes(q) || 
+        s.timestamp.toLowerCase().includes(q)
+      );
+    });
   });
 
   filteredActionItems = computed(() => {
@@ -140,16 +172,16 @@ export class App implements OnDestroy {
   chatMessages = signal<ChatMessage[]>([
     {
       sender: 'ai',
-      text: "👋 Hi! I'm your Meeting AI Assistant. Ask me anything about this discussion, action items, deadlines, or request a drafted email.",
+      text: "👋 Hi! I'm your Meeting AI Assistant. Ask me anything about who spoke what, task assignments, deadlines, decisions, or request a drafted recap email.",
       timestamp: 'Just now'
     }
   ]);
   chatInput = signal<string>('');
   isChatLoading = signal<boolean>(false);
   suggestedPrompts = signal<string[]>([
+    'How many speakers participated and what was their talk time?',
     'What are the critical deadlines?',
     'Summarize each person\'s tasks',
-    'What decisions were agreed upon?',
     'Draft a team follow-up email'
   ]);
 
@@ -370,18 +402,18 @@ export class App implements OnDestroy {
 
     this.progressInterval = setInterval(() => {
       const curr = this.overallProgress();
-      if (curr < 30) {
-        this.overallProgress.set(curr + 6);
+      if (curr < 28) {
+        this.overallProgress.set(curr + 5);
         this.statusMessage.set(`Uploading audio recording (${this.overallProgress()}%)...`);
-      } else if (curr < 65) {
+      } else if (curr < 60) {
         this.overallProgress.set(curr + 4);
         this.statusMessage.set(`Whisper neural speech-to-text transcription (${this.overallProgress()}%)...`);
-      } else if (curr < 85) {
-        this.overallProgress.set(curr + 2);
-        this.statusMessage.set(`Extracting key decisions, topics & action items (${this.overallProgress()}%)...`);
+      } else if (curr < 80) {
+        this.overallProgress.set(curr + 3);
+        this.statusMessage.set(`Acoustic voice diarization & speaker recognition (${this.overallProgress()}%)...`);
       } else if (curr < 96) {
         this.overallProgress.set(curr + 1);
-        this.statusMessage.set(`Finalizing executive summary & sentiment analysis (${this.overallProgress()}%)...`);
+        this.statusMessage.set(`Synthesizing tasks, decisions & speaker analytics (${this.overallProgress()}%)...`);
       }
     }, 260);
   }
@@ -408,9 +440,12 @@ export class App implements OnDestroy {
     this.decisions.set([]);
     this.actionItems.set([]);
     this.segments.set([]);
+    this.numSpeakers.set(0);
+    this.speakerStats.set([]);
     this.insights.set(null);
     this.sentiment.set(null);
     this.searchQuery.set('');
+    this.selectedSpeakerFilter.set('all');
 
     this.uploadProgress.set(0);
     this.processingStage.set('uploading');
@@ -418,6 +453,11 @@ export class App implements OnDestroy {
 
     const formData = new FormData();
     formData.append('file', file, file.name);
+    
+    const hint = this.expectedSpeakersHint();
+    if (hint !== 'auto' && !isNaN(parseInt(hint, 10))) {
+      formData.append('expected_speakers', parseInt(hint, 10).toString());
+    }
 
     this.http.post<any>(this.backendUrl, formData, {
       observe: 'events',
@@ -451,6 +491,8 @@ export class App implements OnDestroy {
           this.keyPoints.set(body.key_points || []);
           this.decisions.set(body.decisions || []);
           this.segments.set(body.segments || []);
+          this.numSpeakers.set(body.num_speakers || 0);
+          this.speakerStats.set(body.speaker_stats || []);
           this.insights.set(body.insights || null);
           this.sentiment.set(body.sentiment || null);
 
@@ -495,7 +537,8 @@ export class App implements OnDestroy {
       transcript: this.transcript(),
       summary: this.summary(),
       action_items: this.actionItems(),
-      decisions: this.decisions()
+      decisions: this.decisions(),
+      speaker_stats: this.speakerStats()
     };
 
     this.http.post<any>(this.chatUrl, payload).subscribe({
@@ -529,13 +572,47 @@ export class App implements OnDestroy {
   // --- Speaker Rename & Edit ---
 
   editSpeaker(oldName: string): void {
-    const newName = prompt(`Enter new name for "${oldName}":`, oldName);
-    if (!newName || newName.trim() === '' || newName === oldName) return;
+    const newName = prompt(`Enter real name for "${oldName}":`, oldName);
+    if (!newName || newName.trim() === '' || newName.trim() === oldName) return;
 
+    const cleanNew = newName.trim();
+
+    // 1. Update Segments
     this.segments.update(segs => 
-      segs.map(s => s.speaker === oldName ? { ...s, speaker: newName.trim() } : s)
+      segs.map(s => s.speaker === oldName ? { ...s, speaker: cleanNew } : s)
     );
-    this.triggerCopyFeedback(`Updated speaker name to "${newName.trim()}"`);
+
+    // 2. Update Speaker Stats
+    this.speakerStats.update(stats => 
+      stats.map(st => st.speaker === oldName ? { ...st, speaker: cleanNew } : st)
+    );
+
+    // 3. Update Action Items if assigned
+    this.actionItems.update(items =>
+      items.map(item => item.assignee === oldName ? { ...item, assignee: cleanNew } : item)
+    );
+
+    // 4. Update selected speaker filter if it was active
+    if (this.selectedSpeakerFilter() === oldName) {
+      this.selectedSpeakerFilter.set(cleanNew);
+    }
+
+    // 5. Update saved history
+    this.saveCurrentMeetingToHistory();
+    this.triggerCopyFeedback(`Updated speaker to "${cleanNew}"`);
+  }
+
+  getSpeakerTheme(speakerName: string): SpeakerColorTheme {
+    const stat = this.speakerStats().find(s => s.speaker === speakerName);
+    if (stat && stat.color_theme) {
+      return stat.color_theme;
+    }
+    return {
+      bg: 'rgba(59, 130, 246, 0.15)',
+      border: '#3b82f6',
+      text: '#60a5fa',
+      name: 'Blue'
+    };
   }
 
   // --- Meeting History Persistence ---
@@ -553,10 +630,12 @@ export class App implements OnDestroy {
       actionItems: this.actionItems(),
       segments: this.segments(),
       insights: this.insights()!,
-      sentiment: this.sentiment()!
+      sentiment: this.sentiment()!,
+      numSpeakers: this.numSpeakers(),
+      speakerStats: this.speakerStats()
     };
 
-    this.savedMeetings.update(list => [newEntry, ...list.slice(0, 9)]);
+    this.savedMeetings.update(list => [newEntry, ...list.filter(m => m.title !== title).slice(0, 9)]);
     this.syncHistoryStorage();
   }
 
@@ -566,9 +645,12 @@ export class App implements OnDestroy {
     this.decisions.set(meeting.decisions);
     this.actionItems.set(meeting.actionItems);
     this.segments.set(meeting.segments);
+    this.numSpeakers.set(meeting.numSpeakers || (meeting.speakerStats ? meeting.speakerStats.length : 1));
+    this.speakerStats.set(meeting.speakerStats || []);
     this.insights.set(meeting.insights);
     this.sentiment.set(meeting.sentiment);
     this.transcript.set(meeting.segments.map(s => `[${s.timestamp}] ${s.speaker}: ${s.text}`).join('\n') || meeting.summary);
+    this.selectedSpeakerFilter.set('all');
     
     this.processingStage.set('completed');
     this.activeTab.set('overview');
@@ -645,12 +727,23 @@ export class App implements OnDestroy {
     let content = `# 🎙️ MEETING-TO-ACTION AI REPORT\n`;
     content += `File: ${this.selectedFile()?.name || 'Meeting Recording'}\n`;
     if (this.insights()) {
-      content += `Duration: ${this.insights()!.duration_formatted} | Words: ${this.insights()!.word_count} | Decisions: ${this.insights()!.decisions_count} | Actions: ${this.insights()!.action_items_count}\n`;
+      content += `Duration: ${this.insights()!.duration_formatted} | Speakers: ${this.numSpeakers()} | Words: ${this.insights()!.word_count} | Decisions: ${this.insights()!.decisions_count} | Actions: ${this.insights()!.action_items_count}\n`;
     }
     if (this.sentiment()) {
       content += `Sentiment: ${this.sentiment()!.overall} (Score: ${this.sentiment()!.score}/100) | Tone: ${this.sentiment()!.tone}\n`;
     }
-    content += `\n=========================================\n`;
+    
+    if (this.speakerStats().length > 0) {
+      content += `\n=========================================\n`;
+      content += `👥 SPEAKER PARTICIPATION & TALK-TIME\n`;
+      content += `=========================================\n`;
+      this.speakerStats().forEach(s => {
+        content += `• ${s.speaker}: ${s.talk_time_formatted} (${s.talk_time_percentage}%) | ${s.word_count} words | ${s.segments_count} turns\n`;
+      });
+      content += `\n`;
+    }
+
+    content += `=========================================\n`;
     content += `📝 EXECUTIVE SUMMARY\n`;
     content += `=========================================\n${this.summary()}\n\n`;
 
@@ -673,7 +766,7 @@ export class App implements OnDestroy {
       });
     }
 
-    content += `=========================================\n📄 FULL TRANSCRIPT\n=========================================\n`;
+    content += `=========================================\n📄 FULL TIME-INDEXED TRANSCRIPT\n=========================================\n`;
     if (this.segments().length > 0) {
       this.segments().forEach(s => {
         content += `[${s.timestamp}] ${s.speaker}: ${s.text}\n`;
@@ -722,9 +815,12 @@ export class App implements OnDestroy {
     this.decisions.set([]);
     this.actionItems.set([]);
     this.segments.set([]);
+    this.numSpeakers.set(0);
+    this.speakerStats.set([]);
     this.insights.set(null);
     this.sentiment.set(null);
     this.searchQuery.set('');
+    this.selectedSpeakerFilter.set('all');
     this.activeTab.set('overview');
   }
 

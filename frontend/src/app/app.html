@@ -11,14 +11,14 @@
       </div>
       <div class="brand-titles">
         <span class="brand-title">Meeting-to-Action AI</span>
-        <span class="brand-edition">Cyber-Quartz Suite</span>
+        <span class="brand-edition">Acoustic Multi-Speaker Intelligence</span>
       </div>
     </div>
 
     <div class="nav-right">
       <div class="system-status-badge">
         <span class="status-indicator-dot"></span>
-        <span>Neural Whisper Active</span>
+        <span>Neural Diarization & Whisper Active</span>
       </div>
       @if (summary() || selectedFile() || transcript()) {
         <button type="button" class="btn-nav-reset" (click)="resetAll()" title="Reset workspace">
@@ -38,7 +38,7 @@
       </div>
       <h1>Meeting-to-Action AI</h1>
       <p class="subtitle">
-        Convert live or recorded speech into actionable task checklists, key decision matrices, executive summaries, and interactive AI chat.
+        Accurately transcribe audio, detect <strong>how many speakers</strong> are present, attribute <strong>which speaker spoke what</strong>, extract task matrices, and chat with meeting intelligence.
       </p>
     </header>
 
@@ -48,7 +48,7 @@
       <!-- Segmented Mode Switcher -->
       <div class="segmented-control">
         <button 
-          type="button"
+          type="button" 
           class="segment-btn" 
           [class.active]="ingestionMode() === 'upload'"
           (click)="ingestionMode.set('upload')"
@@ -59,7 +59,7 @@
         </button>
 
         <button 
-          type="button"
+          type="button" 
           class="segment-btn" 
           [class.active]="ingestionMode() === 'record'"
           (click)="ingestionMode.set('record')"
@@ -71,7 +71,7 @@
 
         @if (savedMeetings().length > 0) {
           <button 
-            type="button"
+            type="button" 
             class="segment-btn history-btn" 
             [class.active]="activeTab() === 'history' && (summary() || actionItems().length > 0)"
             (click)="activeTab.set('history')"
@@ -201,6 +201,31 @@
         </div>
       }
 
+      <!-- Advanced Processing Settings & Diarization Options -->
+      <div class="settings-strip">
+        <div class="speaker-hint-box">
+          <label for="speaker-detection-hint" class="hint-label">
+            <span class="hint-icon">🎙️</span>
+            <span>Speaker Count Mode:</span>
+          </label>
+          <select 
+            id="speaker-detection-hint"
+            class="hint-select"
+            [ngModel]="expectedSpeakersHint()" 
+            (ngModelChange)="expectedSpeakersHint.set($event)"
+            [disabled]="processingStage() === 'uploading' || processingStage() === 'transcribing'"
+          >
+            <option value="auto">✨ Auto-Detect (Acoustic AI)</option>
+            <option value="1">1 Speaker (Solo Presentation)</option>
+            <option value="2">2 Speakers (1-on-1 Dialogue / Interview)</option>
+            <option value="3">3 Speakers (Small Group Discussion)</option>
+            <option value="4">4 Speakers (Team Meeting)</option>
+            <option value="5">5 Speakers (Panel)</option>
+            <option value="6">6+ Speakers (Multi-Speaker Conference)</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Action Toolbar -->
       <div class="action-bar">
         <button 
@@ -211,9 +236,9 @@
         >
           @if (processingStage() === 'uploading' || processingStage() === 'transcribing') {
             <span class="spinner"></span>
-            <span>Processing Meeting ({{ overallProgress() }}%)...</span>
+            <span>Processing Audio & Diarization ({{ overallProgress() }}%)...</span>
           } @else {
-            <span>✨ Run AI Meeting Intelligence</span>
+            <span>✨ Run AI Diarization & Meeting Intelligence</span>
             <svg class="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
@@ -244,12 +269,16 @@
               1. Audio Decode
             </div>
             <div class="step-divider"></div>
-            <div class="step-pill" [class.done]="overallProgress() >= 75" [class.active]="overallProgress() >= 25 && overallProgress() < 75">
-              2. Whisper Neural STT
+            <div class="step-pill" [class.done]="overallProgress() >= 60" [class.active]="overallProgress() >= 25 && overallProgress() < 60">
+              2. Whisper STT
             </div>
             <div class="step-divider"></div>
-            <div class="step-pill" [class.done]="overallProgress() === 100" [class.active]="overallProgress() >= 75">
-              3. NLP Synthesis & Tasks
+            <div class="step-pill" [class.done]="overallProgress() >= 85" [class.active]="overallProgress() >= 60 && overallProgress() < 85">
+              3. Speaker Diarization
+            </div>
+            <div class="step-divider"></div>
+            <div class="step-pill" [class.done]="overallProgress() === 100" [class.active]="overallProgress() >= 85">
+              4. Tasks & Analytics
             </div>
           </div>
         </div>
@@ -275,7 +304,9 @@
           <div class="results-header">
             <div class="results-title-group">
               <h2>Meeting Intelligence Dashboard</h2>
-              <span class="results-timestamp">Analysis Complete</span>
+              <span class="results-timestamp">
+                {{ numSpeakers() > 0 ? (numSpeakers() + ' Speaker' + (numSpeakers() > 1 ? 's' : '') + ' Identified • ') : '' }}Analysis Complete
+              </span>
             </div>
             <div class="download-toolbar">
               <button class="btn btn-sm btn-outline" (click)="downloadMeetingReport('pdf')" title="Print or save as PDF">
@@ -329,6 +360,9 @@
               (click)="activeTab.set('transcript')"
             >
               <span>📄 Transcript</span>
+              @if (segments().length > 0) {
+                <span class="tab-badge">{{ segments().length }} turns</span>
+              }
             </button>
 
             @if (savedMeetings().length > 0) {
@@ -359,6 +393,14 @@
                   </div>
 
                   <div class="insight-card">
+                    <div class="insight-icon-box">👥</div>
+                    <div class="insight-data">
+                      <span class="insight-value">{{ numSpeakers() || 1 }}</span>
+                      <span class="insight-label">Speakers</span>
+                    </div>
+                  </div>
+
+                  <div class="insight-card">
                     <div class="insight-icon-box">📝</div>
                     <div class="insight-data">
                       <span class="insight-value">{{ insights()!.word_count }}</span>
@@ -380,6 +422,88 @@
                       <span class="insight-value">{{ insights()!.action_items_count }}</span>
                       <span class="insight-label">Action Items</span>
                     </div>
+                  </div>
+                </div>
+              }
+
+              <!-- Speaker Participation & Talk-Time Analytics Card -->
+              @if (speakerStats().length > 0) {
+                <div class="result-card speaker-analytics-card">
+                  <div class="card-title-row">
+                    <div class="title-with-icon">
+                      <span class="card-icon">👥</span>
+                      <h3>Speaker Voice Attribution & Talk-Time Distribution</h3>
+                    </div>
+                    <span class="speaker-count-pill">{{ numSpeakers() }} Active Speaker{{ numSpeakers() > 1 ? 's' : '' }}</span>
+                  </div>
+
+                  <!-- Multi-speaker talk time distribution progress bar -->
+                  <div class="speaker-distribution-container">
+                    <div class="speaker-distribution-bar">
+                      @for (stat of speakerStats(); track stat.speaker) {
+                        <div 
+                          class="speaker-bar-segment" 
+                          [style.width.%]="stat.talk_time_percentage"
+                          [style.background]="stat.color_theme.border"
+                          [title]="stat.speaker + ': ' + stat.talk_time_formatted + ' (' + stat.talk_time_percentage + '%)'"
+                        ></div>
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Per-speaker detailed stat cards -->
+                  <div class="speaker-grid">
+                    @for (stat of speakerStats(); track stat.speaker) {
+                      <div 
+                        class="speaker-stat-card"
+                        [style.borderColor]="stat.color_theme.border"
+                        [style.background]="stat.color_theme.bg"
+                      >
+                        <div class="speaker-card-header">
+                          <div class="speaker-name-badge" [style.color]="stat.color_theme.text">
+                            <span class="speaker-avatar-circle" [style.background]="stat.color_theme.border">
+                              {{ stat.speaker.charAt(0).toUpperCase() }}
+                            </span>
+                            <span class="speaker-title-name">{{ stat.speaker }}</span>
+                          </div>
+                          <button 
+                            type="button" 
+                            class="btn-rename-speaker" 
+                            (click)="editSpeaker(stat.speaker)"
+                            title="Rename this speaker across the transcript & tasks"
+                          >
+                            ✏️ Rename
+                          </button>
+                        </div>
+
+                        <div class="speaker-metrics-row">
+                          <div class="speaker-metric-box">
+                            <span class="metric-label">Talk Time</span>
+                            <span class="metric-val" [style.color]="stat.color_theme.text">{{ stat.talk_time_formatted }}</span>
+                          </div>
+                          <div class="speaker-metric-box">
+                            <span class="metric-label">Share</span>
+                            <span class="metric-val" [style.color]="stat.color_theme.text">{{ stat.talk_time_percentage }}%</span>
+                          </div>
+                          <div class="speaker-metric-box">
+                            <span class="metric-label">Words</span>
+                            <span class="metric-val">{{ stat.word_count }}</span>
+                          </div>
+                          <div class="speaker-metric-box">
+                            <span class="metric-label">Turns</span>
+                            <span class="metric-val">{{ stat.segments_count }}</span>
+                          </div>
+                        </div>
+
+                        <button 
+                          type="button" 
+                          class="btn-filter-speaker" 
+                          (click)="selectedSpeakerFilter.set(stat.speaker); activeTab.set('transcript')"
+                        >
+                          View {{ stat.speaker }}'s Statements ➔
+                        </button>
+                      </div>
+                    }
                   </div>
                 </div>
               }
@@ -502,7 +626,12 @@
                         <div class="action-content">
                           <span class="action-task">{{ item.task }}</span>
                           <div class="action-tags">
-                            <span class="tag-assignee">
+                            <span 
+                              class="tag-assignee"
+                              [style.borderColor]="getSpeakerTheme(item.assignee).border"
+                              [style.background]="getSpeakerTheme(item.assignee).bg"
+                              [style.color]="getSpeakerTheme(item.assignee).text"
+                            >
                               👤 {{ item.assignee }}
                             </span>
                             <span class="tag-deadline">
@@ -557,7 +686,7 @@
                     <span class="card-icon">🤖</span>
                     <div>
                       <h3>Interactive Meeting Assistant</h3>
-                      <p class="chat-subtitle">Ask questions about assignments, deadlines, decisions, or request drafted summaries</p>
+                      <p class="chat-subtitle">Ask questions about speaker statements, talk time, task assignments, decisions, or request drafted summaries</p>
                     </div>
                   </div>
                 </div>
@@ -599,7 +728,7 @@
                 <div class="chat-input-bar">
                   <input 
                     type="text" 
-                    placeholder="Ask a question about this meeting (e.g. 'What are Rahul\'s deliverables?')..."
+                    placeholder="Ask a question (e.g. 'How much did each person speak?' or 'What are Rahul\'s deliverables?')..."
                     [ngModel]="chatInput()"
                     (ngModelChange)="chatInput.set($event)"
                     (keydown.enter)="sendChatMessage()"
@@ -619,7 +748,7 @@
             </div>
           }
 
-          <!-- TAB 4: Searchable Transcript with Editable Speakers -->
+          <!-- TAB 4: Searchable Transcript with Speaker Filtering & Editing -->
           @if (activeTab() === 'transcript') {
             <div class="tab-content">
               <div class="result-card transcript-card">
@@ -638,17 +767,46 @@
                   </button>
                 </div>
 
+                <!-- Speaker Filter Chips Toolbar -->
+                @if (speakerStats().length > 0) {
+                  <div class="speaker-filter-toolbar">
+                    <span class="speaker-filter-label">Filter by Speaker:</span>
+                    <div class="speaker-filter-pills">
+                      <button 
+                        type="button" 
+                        class="speaker-filter-pill" 
+                        [class.active]="selectedSpeakerFilter() === 'all'"
+                        (click)="selectedSpeakerFilter.set('all')"
+                      >
+                        All Speakers ({{ segments().length }})
+                      </button>
+                      @for (stat of speakerStats(); track stat.speaker) {
+                        <button 
+                          type="button" 
+                          class="speaker-filter-pill" 
+                          [class.active]="selectedSpeakerFilter() === stat.speaker"
+                          [style.borderColor]="stat.color_theme.border"
+                          (click)="selectedSpeakerFilter.set(stat.speaker)"
+                        >
+                          <span class="speaker-pill-dot" [style.background]="stat.color_theme.border"></span>
+                          <span>{{ stat.speaker }} ({{ stat.talk_time_formatted }})</span>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+
                 <!-- Search Bar -->
                 <div class="transcript-search-bar">
                   <span class="search-icon">🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search keywords or speakers (e.g. 'API', 'Angular', 'Speaker 1')..." 
+                    placeholder="Search keywords, topics, or speaker names..." 
                     [ngModel]="searchQuery()" 
                     (ngModelChange)="searchQuery.set($event)"
                     class="search-input"
                   />
-                  @if (searchQuery()) {
+                  @if (searchQuery() || selectedSpeakerFilter() !== 'all') {
                     <span class="search-match-badge">{{ filteredSegments().length }} matches</span>
                   }
                 </div>
@@ -657,13 +815,16 @@
                 <div class="transcript-box">
                   @if (filteredSegments().length > 0) {
                     <div class="segments-list">
-                      @for (seg of filteredSegments(); track seg.timestamp + seg.text) {
+                      @for (seg of filteredSegments(); track seg.timestamp + seg.speaker + seg.text) {
                         <div class="segment-row">
                           <span class="segment-timestamp">{{ seg.timestamp }}</span>
                           
                           <span 
                             class="segment-speaker" 
-                            title="Click to rename speaker"
+                            [style.background]="getSpeakerTheme(seg.speaker).bg"
+                            [style.borderColor]="getSpeakerTheme(seg.speaker).border"
+                            [style.color]="getSpeakerTheme(seg.speaker).text"
+                            title="Click to rename this speaker across the entire meeting"
                             (click)="editSpeaker(seg.speaker)"
                           >
                             👤 {{ seg.speaker }} ✏️
@@ -674,7 +835,12 @@
                       }
                     </div>
                   } @else {
-                    <pre class="raw-transcript">{{ transcript() }}</pre>
+                    <div class="empty-filter-state">
+                      <p>No speech segments match the current filter or search.</p>
+                      <button type="button" class="btn btn-sm btn-secondary" (click)="searchQuery.set(''); selectedSpeakerFilter.set('all')">
+                        Reset Filters
+                      </button>
+                    </div>
                   }
                 </div>
 
@@ -702,7 +868,8 @@
                         <div class="history-meta">
                           <span>📅 {{ m.date }}</span>
                           <span>⏱️ {{ m.duration }}</span>
-                          <span>✅ {{ m.actionItems.length }} Action Items</span>
+                          <span>👥 {{ m.numSpeakers || (m.speakerStats ? m.speakerStats.length : 1) }} Speakers</span>
+                          <span>✅ {{ m.actionItems.length }} Tasks</span>
                           <span>🤝 {{ m.decisions.length }} Decisions</span>
                         </div>
                       </div>

@@ -104,4 +104,28 @@ describe('App', () => {
     expect(app.formatRecordingTime(0)).toBe('00:00');
     expect(app.formatRecordingTime(65)).toBe('01:05');
   });
+
+  it('should filter transcript segments by speaker', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    app.segments.set([
+      { timestamp: '00:01', start: 1, end: 5, speaker: 'Speaker 1', text: 'Backend updates' },
+      { timestamp: '00:15', start: 15, end: 20, speaker: 'Speaker 2', text: 'Frontend components' },
+      { timestamp: '00:25', start: 25, end: 30, speaker: 'Speaker 1', text: 'Database migrations' }
+    ]);
+
+    expect(app.filteredSegments().length).toBe(3);
+
+    app.selectedSpeakerFilter.set('Speaker 1');
+    expect(app.filteredSegments().length).toBe(2);
+    expect(app.filteredSegments()[0].speaker).toBe('Speaker 1');
+    expect(app.filteredSegments()[1].speaker).toBe('Speaker 1');
+
+    app.selectedSpeakerFilter.set('Speaker 2');
+    expect(app.filteredSegments().length).toBe(1);
+    expect(app.filteredSegments()[0].text).toContain('Frontend components');
+
+    app.selectedSpeakerFilter.set('all');
+    expect(app.filteredSegments().length).toBe(3);
+  });
 });
